@@ -1,0 +1,18 @@
+# Environment files — never commit these
+bot/.env
+api/.env
+
+# Database
+api/data/penny.db
+
+# Node modules
+node_modules/
+bot/node_modules/
+api/node_modules/
+
+# PM2 logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

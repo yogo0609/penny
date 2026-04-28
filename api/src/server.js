@@ -1,0 +1,42 @@
+// === DEPENDENCIES ===
+const express = require('express');
+const cors    = require('cors');
+require('dotenv').config();
+
+
+// === APP SETUP ===
+const app    = express();
+const PORT   = process.env.PORT || 3001;
+
+
+// === MIDDLEWARE ===
+// REF-SRV-01
+app.use(cors());
+app.use(express.json());
+
+
+// === ROUTES ===
+// REF-SRV-02
+app.use('/api', require('./routes'));
+app.use('/auth', require('./auth').router);
+
+
+// === 404 HANDLER ===
+// REF-SRV-03
+app.use((req, res) => {
+    res.status(404).json({ error: 'Route not found' });
+});
+
+
+// === ERROR HANDLER ===
+// REF-SRV-04
+app.use((err, req, res, next) => {
+    console.error(`[ERROR] ${err.message}`);
+    res.status(500).json({ error: 'Internal server error' });
+});
+
+
+// === START ===
+app.listen(PORT, () => {
+    console.log(`✅ Penny API running on port ${PORT}`);
+});

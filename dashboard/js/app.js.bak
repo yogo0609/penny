@@ -1,0 +1,1158 @@
+// === PENNY DASHBOARD — APP.JS ===
+// REF-APP-01
+
+
+// === STATE ===
+// REF-APP-02
+const State = {
+    token:    null,
+    user:     null,
+    guildId:  null,
+    config:   {},
+    section:  'overview',
+    tab:      null,
+};
+
+
+// === TOAST NOTIFICATIONS ===
+// REF-APP-03
+function toast(message, type = 'success') {
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = message;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+}
+
+
+// === AUTH HELPERS ===
+// REF-APP-04
+function saveSession(token, user) {
+    localStorage.setItem('penny_token', token);
+    localStorage.setItem('penny_user', JSON.stringify(user));
+    State.token = token;
+    State.user  = user;
+}
+
+function loadSession() {
+    const token = localStorage.getItem('penny_token');
+    const user  = localStorage.getItem('penny_user');
+    if (token && user) {
+        State.token = token;
+        State.user  = JSON.parse(user);
+        return true;
+    }
+    return false;
+}
+
+function clearSession() {
+    localStorage.removeItem('penny_token');
+    localStorage.removeItem('penny_user');
+    State.token  = null;
+    State.user   = null;
+    State.config = {};
+}
+
+
+// === LOGIN HANDLER ===
+// REF-APP-05
+async function handleLogin() {
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errorEl  = document.getElementById('login-error');
+    const btn      = document.getElementById('login-btn');
+
+    errorEl.classList.add('hidden');
+
+    if (!username || !password) {
+        errorEl.textContent = 'Please enter your username and password.';
+        errorEl.classList.remove('hidden');
+        return;
+    }
+
+    btn.textContent = 'Signing in...';
+    btn.disabled    = true;
+
+    const res = await fetch(`${window.PENNY_API_URL}/auth/login`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ username, password }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+        errorEl.textContent = data.error || 'Login failed.';
+        errorEl.classList.remove('hidden');
+        btn.textContent = 'Sign In';
+        btn.disabled    = false;
+        return;
+    }
+
+    saveSession(data.token, data.user);
+    showDashboard();
+}
+
+
+// === SETUP HANDLER ===
+// REF-APP-06
+async function handleSetup() {
+    const username   = document.getElementById('setup-username').value.trim();
+    const password   = document.getElementById('setup-password').value;
+    const discord_id = document.getElementById('setup-discord').value.trim();
+    const errorEl    = document.getElementById('setup-error');
+
+    errorEl.classList.add('hidden');
+
+    if (!username || !password) {
+        errorEl.textContent = 'Username and password are required.';
+        errorEl.classList.remove('hidden');
+        return;
+    }
+
+    if (password.length < 8) {
+        errorEl.textContent = 'Password must be at least 8 characters.';
+        errorEl.classList.remove('hidden');
+        return;
+    }
+
+    const res = await fetch(`${window.PENNY_API_URL}/auth/setup`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ username, password, discord_id: discord_id || undefined }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+        errorEl.textContent = data.error || 'Setup failed.';
+        errorEl.classList.remove('hidden');
+        return;
+    }
+
+    toast('Owner account created — please sign in.');
+    showLogin();
+}
+
+
+// === LOGOUT HANDLER ===
+// REF-APP-07
+function handleLogout() {
+    clearSession();
+    showLogin();
+}
+
+
+// === SCREEN ROUTER ===
+// REF-APP-08
+function showLogin() {
+    document.getElementById('login-screen').classList.remove('hidden');
+    document.getElementById('setup-screen').classList.add('hidden');
+    document.getElementById('dashboard').classList.add('hidden');
+}
+
+function showSetup() {
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('setup-screen').classList.remove('hidden');
+    document.getElementById('dashboard').classList.add('hidden');
+}
+
+async function showDashboard() {
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('setup-screen').classList.add('hidden');
+    document.getElementById('dashboard').classList.remove('hidden');
+
+    // REF-APP-09 — apply role visibility
+    const isOwner = State.user?.role === 'owner';
+    document.querySelectorAll('.owner-only').forEach(el => {
+        el.style.display = isOwner ? '' : 'none';
+    });
+
+    // REF-APP-10 — populate user pill
+    document.getElementById('user-pill-name').textContent  = State.user?.username || '';
+    document.getElementById('user-role-badge').textContent = State.user?.role     || '';
+
+    // REF-APP-11 — check penny status
+    checkPennyStatus();
+    const savedGuild = localStorage.getItem('penny_guild') || '1420831117602197597';
+    if (savedGuild) {
+        State.guildId = savedGuild;
+        document.getElementById('guild-select').value = savedGuild;
+        loadGuildConfig();
+}
+
+function selectGuild(guildId) {
+    State.guildId = guildId;
+    localStorage.setItem('penny_guild', guildId);
+    loadGuildConfig();
+    renderContent();
+}
+
+async function loadGuildConfig() {
+    if (!State.guildId) return;
+    try {
+        State.config = await apiGet(`/api/config/${State.guildId}`);
+    } catch(e) { console.error(e); }
+}
+
+    // REF-APP-12 — load initial section
+    setSection('overview');
+}
+
+
+// === CHECK PENNY STATUS ===
+// REF-APP-13
+async function checkPennyStatus() {
+    const res = await fetch(`${window.PENNY_API_URL}/api/health`, {
+        headers: { 'x-api-key': window.PENNY_API_KEY || '' }
+    });
+    const dot  = document.querySelector('.status-dot');
+    const text = document.querySelector('.status-text');
+    if (res.ok) {
+        dot.classList.remove('offline');
+        text.textContent = 'Penny online';
+    } else {
+        dot.classList.add('offline');
+        text.textContent = 'Penny offline';
+    }
+}
+
+
+// === SECTION DEFINITIONS ===
+// REF-APP-14
+const SECTIONS = {
+    overview: {
+        tabs:   ['Summary', 'Activity'],
+        action: null,
+        render: renderOverview,
+    },
+    protection: {
+        tabs:   ['Modules', 'Thresholds', 'Bad Words'],
+        action: { label: 'Save Changes', fn: saveProtection },
+        render: renderProtection,
+    },
+    exemptions: {
+        tabs:   ['Roles', 'Users', 'Channels'],
+        action: null,
+        render: renderExemptions,
+    },
+    moderation: {
+        tabs:   ['Mod Log', 'Warnings', 'Audit Log'],
+        action: null,
+        render: renderModeration,
+    },
+    welcome: {
+        tabs:   ['Welcome Message', 'Auto Role'],
+        action: { label: 'Save Changes', fn: saveWelcome },
+        render: renderWelcome,
+    },
+    users: {
+        tabs:   ['Dashboard Users'],
+        action: { label: 'Add User', fn: showAddUserModal },
+        render: renderUsers,
+        ownerOnly: true,
+    },
+    settings: {
+        tabs:   ['General', 'Appearance', 'Danger Zone'],
+        action: null,
+        render: renderSettings,
+    },
+};
+
+
+// === NAVIGATION ===
+// REF-APP-15
+function setSection(section) {
+    const def = SECTIONS[section];
+    if (!def) return;
+
+    // Block non-owners from owner-only sections
+    if (def.ownerOnly && State.user?.role !== 'owner') return;
+
+    State.section = section;
+    State.tab     = def.tabs[0];
+
+    // Update top nav active state
+    document.querySelectorAll('.nav-item').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.section === section);
+});
+    renderSubnav();
+    renderContent();
+}
+
+function setTab(tab) {
+    State.tab = tab;
+    document.querySelectorAll('.subnav-item').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+    });
+    renderContent();
+}
+
+function renderSubnav() {
+    const def    = SECTIONS[State.section];
+    const subnav = document.getElementById('subnav');
+
+    let html = def.tabs.map(t =>
+        `<button class="subnav-item${t === State.tab ? ' active' : ''}" data-tab="${t}" onclick="setTab('${t}')">${t}</button>`
+    ).join('');
+
+    if (def.action) {
+        html += `<div class="subnav-right"><button class="subnav-btn" onclick="${def.action.fn.name}()">${def.action.label}</button></div>`;
+    }
+
+    subnav.innerHTML = html;
+}
+
+function renderContent() {
+    const def = SECTIONS[State.section];
+    def.render(State.tab);
+}
+
+
+// === WIRE UP TOP NAV CLICKS ===
+// REF-APP-16
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.nav-item').forEach(btn => {
+        btn.addEventListener('click', () => setSection(btn.dataset.section));
+    });
+
+    // Enter key on login
+    document.getElementById('login-password')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') handleLogin();
+    });
+
+    init();
+});
+
+
+// === INIT ===
+// REF-APP-17
+async function init() {
+    // Check if setup is required
+    const setupRes  = await fetch(`${window.PENNY_API_URL}/auth/setup/status`);
+    const setupData = await setupRes.json();
+
+    if (setupData.setupRequired) {
+        showSetup();
+        return;
+    }
+
+    // Try to restore session
+    if (loadSession()) {
+        showDashboard();
+        return;
+    }
+
+    showLogin();
+}
+
+
+// === API REQUEST WITH AUTH ===
+// REF-APP-18
+async function apiGet(path) {
+    const res = await fetch(`${window.PENNY_API_URL}${path}`, {
+        headers: {
+            'x-api-key':     window.PENNY_API_KEY || '',
+            'Authorization': `Bearer ${State.token}`,
+        }
+    });
+    if (!res.ok) throw new Error(`GET ${path} failed`);
+    return res.json();
+}
+
+async function apiPost(path, body) {
+    const res = await fetch(`${window.PENNY_API_URL}${path}`, {
+        method:  'POST',
+        headers: {
+            'Content-Type':  'application/json',
+            'x-api-key':     window.PENNY_API_KEY || '',
+            'Authorization': `Bearer ${State.token}`,
+        },
+        body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`POST ${path} failed`);
+    return res.json();
+}
+
+async function apiPatch(path, body) {
+    const res = await fetch(`${window.PENNY_API_URL}${path}`, {
+        method:  'PATCH',
+        headers: {
+            'Content-Type':  'application/json',
+            'x-api-key':     window.PENNY_API_KEY || '',
+            'Authorization': `Bearer ${State.token}`,
+        },
+        body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`PATCH ${path} failed`);
+    return res.json();
+}
+
+async function apiDelete(path, body) {
+    const res = await fetch(`${window.PENNY_API_URL}${path}`, {
+        method:  'DELETE',
+        headers: {
+            'Content-Type':  'application/json',
+            'x-api-key':     window.PENNY_API_KEY || '',
+            'Authorization': `Bearer ${State.token}`,
+        },
+        body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) throw new Error(`DELETE ${path} failed`);
+    return res.json();
+}
+
+
+// ============================================================
+// === PAGE RENDERERS ===
+// ============================================================
+
+// === OVERVIEW ===
+// REF-APP-19
+function renderOverview(tab) {
+    const el = document.getElementById('content');
+
+    if (tab === 'Summary') {
+        el.innerHTML = `
+            <div class="page-heading">Good to see you, ${State.user?.username || 'Admin'}.</div>
+            <div class="page-sub">Here's what Penny has been protecting in your server.</div>
+            <div class="stats-grid">
+                <div class="stat-card accent"><div class="stat-label">Actions Today</div><div class="stat-value" id="stat-actions">—</div><div class="stat-sub">Security events</div></div>
+                <div class="stat-card green"><div class="stat-label">Spam Blocked</div><div class="stat-value" id="stat-spam">—</div><div class="stat-sub">Last 24 hours</div></div>
+                <div class="stat-card red"><div class="stat-label">Active Warnings</div><div class="stat-value" id="stat-warnings">—</div><div class="stat-sub">Across all users</div></div>
+                <div class="stat-card amber"><div class="stat-label">Test Mode</div><div class="stat-value" id="stat-testmode">—</div><div class="stat-sub">No actions taken when ON</div></div>
+            </div>
+            <div class="card">
+                <div class="card-header"><div class="card-title">Protection Status</div></div>
+                <div id="protection-status-list"><div class="empty-state"><div class="empty-state-title">Loading...</div></div></div>
+            </div>`;
+        loadOverviewStats();
+    }
+
+    if (tab === 'Activity') {
+        el.innerHTML = `
+            <div class="page-heading">Recent Activity</div>
+            <div class="page-sub">Live feed of all Penny actions across your server.</div>
+            <div class="card">
+                <div class="card-header"><div class="card-title">Event Feed</div></div>
+                <div id="activity-feed"><div class="empty-state"><div class="empty-state-title">Loading...</div></div></div>
+            </div>`;
+        loadActivity();
+    }
+}
+
+async function loadOverviewStats() {
+    if (!State.guildId) {
+        document.getElementById('stat-actions').textContent    = 'N/A';
+        document.getElementById('stat-spam').textContent       = 'N/A';
+        document.getElementById('stat-warnings').textContent   = 'N/A';
+        document.getElementById('stat-testmode').textContent   = 'N/A';
+        return;
+    }
+    try {
+        const config = await apiGet(`/api/config/${State.guildId}`);
+        State.config = config;
+        document.getElementById('stat-testmode').textContent = config.test_mode ? 'ON' : 'OFF';
+
+        const testBadge = document.getElementById('test-badge');
+        if (config.test_mode) testBadge.classList.remove('hidden');
+        else testBadge.classList.add('hidden');
+
+        const modules = [
+            { key: 'spam_enabled',         name: 'Spam Detection' },
+            { key: 'raid_enabled',          name: 'Anti-Raid' },
+            { key: 'badwords_enabled',      name: 'Bad Word Filter' },
+            { key: 'caps_enabled',          name: 'Caps Lock Filter' },
+            { key: 'mass_mention_enabled',  name: 'Mass Mention' },
+            { key: 'antilink_enabled',      name: 'Anti-Invite Links' },
+            { key: 'accountage_enabled',    name: 'Account Age Gate' },
+        ];
+
+        const list = document.getElementById('protection-status-list');
+        list.innerHTML = modules.map(m => `
+            <div class="toggle-row">
+                <div class="toggle-info">
+                    <div class="toggle-name">${m.name}</div>
+                </div>
+                <span class="badge ${config[m.key] ? 'badge-join' : 'badge-spam'}">${config[m.key] ? 'ACTIVE' : 'OFF'}</span>
+            </div>`).join('');
+
+        const logs = await apiGet(`/api/logs/${State.guildId}?limit=100`);
+        document.getElementById('stat-actions').textContent  = logs.length;
+        document.getElementById('stat-spam').textContent     = logs.filter(l => l.action === 'SPAM DETECTED').length;
+        document.getElementById('stat-warnings').textContent = logs.filter(l => l.action === 'WARN ISSUED').length;
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function loadActivity() {
+    if (!State.guildId) {
+        document.getElementById('activity-feed').innerHTML = `<div class="empty-state"><div class="empty-state-title">No server selected</div><div class="empty-state-sub">Select a server from the dropdown above</div></div>`;
+        return;
+    }
+    try {
+        const logs = await apiGet(`/api/logs/${State.guildId}?limit=50`);
+        const feed = document.getElementById('activity-feed');
+        if (!logs.length) {
+            feed.innerHTML = `<div class="empty-state"><div class="empty-state-title">No activity yet</div><div class="empty-state-sub">Penny hasn't logged any events for this server</div></div>`;
+            return;
+        }
+        const colorMap = { 'SPAM DETECTED': 'var(--red)', 'WARN ISSUED': 'var(--amber)', 'RAID DETECTED': '#be185d', 'BAD WORD': 'var(--amber)', 'CAPS FILTER': 'var(--accent)', 'INVITE LINK': 'var(--red)', 'MASS MENTION': 'var(--red)' };
+        feed.innerHTML = logs.map(l => `
+            <div class="activity-item">
+                <div class="activity-dot" style="background:${colorMap[l.action] || 'var(--text3)'}"></div>
+                <div>
+                    <div class="activity-text"><strong>${l.action}</strong>${l.reason ? ' — ' + l.reason : ''}</div>
+                    <div class="activity-time">${new Date(l.created_at).toLocaleString()}</div>
+                </div>
+            </div>`).join('');
+    } catch(e) {
+        console.error(e);
+    }
+}
+
+
+// === PROTECTION ===
+// REF-APP-20
+function renderProtection(tab) {
+    const el = document.getElementById('content');
+
+    if (tab === 'Modules') {
+        const c = State.config;
+        el.innerHTML = `
+            <div class="page-heading">Security Modules</div>
+            <div class="page-sub">Enable or disable each protection module and set its action.</div>
+            <div class="card">
+                <div class="card-header"><div class="card-title">Protection Modules</div>
+                ${moduleRow('spam_enabled',        'Spam Detection',    'Delete or warn users sending too many messages too fast', 'spam_action',         c)}
+                ${moduleRow('raid_enabled',         'Anti-Raid',         'Detect and respond to mass join events',                  'raid_action',         c)}
+                ${moduleRow('badwords_enabled',     'Bad Word Filter',   'Remove messages containing prohibited words',             'badwords_action',     c)}
+                ${moduleRow('caps_enabled',         'Caps Lock Filter',  'Remove messages that are mostly uppercase',               'caps_action',         c)}
+                ${moduleRow('mass_mention_enabled', 'Mass Mention',      'Block messages with excessive user or role mentions',     'mass_mention_action', c)}
+                ${moduleRow('antilink_enabled',     'Anti-Invite Links', 'Remove Discord invite links posted by members',          'antilink_action',     c)}
+                ${moduleRow('accountage_enabled',   'Account Age Gate',  'Kick accounts newer than the minimum age threshold',     null,                  c)}
+                ${moduleRow('antiphishing_enabled', 'Anti-Phishing',     'Block known malicious and phishing URLs',                null,                  c)}
+            </div>`;
+    }
+
+    if (tab === 'Thresholds') {
+        const c = State.config;
+        el.innerHTML = `
+            <div class="page-heading">Thresholds</div>
+            <div class="page-sub">Set detection sensitivity for each module.</div>
+            <div class="card">
+                <div class="card-header"><div class="card-title">Detection Thresholds</div></div>
+                ${thrRow('spam_max_messages',    'Spam max messages',       c.spam_max_messages    || 5,     'messages')}
+                ${thrRow('spam_window_ms',       'Spam time window',        c.spam_window_ms       || 5000,  'ms')}
+                ${thrRow('raid_max_joins',       'Raid max joins',          c.raid_max_joins       || 5,     'joins')}
+                ${thrRow('raid_window_ms',       'Raid time window',        c.raid_window_ms       || 10000, 'ms')}
+                ${thrRow('caps_threshold',       'Caps threshold',          c.caps_threshold       || 0.7,   '%')}
+                ${thrRow('caps_min_length',      'Caps min message length', c.caps_min_length      || 10,    'chars')}
+                ${thrRow('mass_mention_max',     'Mass mention max',        c.mass_mention_max     || 5,     'mentions')}
+                ${thrRow('accountage_min_days',  'Account age minimum',     c.accountage_min_days  || 7,     'days')}
+                ${thrRow('max_warnings',         'Max warnings before kick',  c.max_warnings         || 3,     'warnings')}
+            </div>`;
+    }
+
+    if (tab === 'Bad Words') {
+        const words = State.config.badwords_list || [];
+        el.innerHTML = `
+            <div class="page-heading">Bad Word List</div>
+            <div class="page-sub">Words that trigger the bad word filter. Click × to remove.</div>
+            <div class="card">
+                <div class="card-header"><div class="card-title">Blocked Words</div></div>
+                <div class="word-grid" id="word-grid">
+                    ${words.map(w => wordTag(w)).join('') || '<span style="color:var(--text3);font-size:13px">No words added yet</span>'}
+                </div>
+                <div class="word-add">
+                    <input class="word-input" id="word-input" placeholder="Type a word and press Add">
+                    <button class="add-btn" onclick="addBadWord()">Add Word</button>
+                </div>
+            </div>`;
+    }
+}
+
+function moduleRow(key, name, desc, actionKey, config) {
+    const checked = config[key] ? 'checked' : '';
+    const action  = actionKey ? (config[actionKey] || 'delete') : '';
+    const pill    = actionKey ? `<span class="action-pill" onclick="cycleAction(this,'${actionKey}')">${action}</span>` : '';
+    return `
+        <div class="toggle-row">
+            <div class="toggle-info">
+                <div class="toggle-name">${name}</div>
+            </div>
+            <div class="toggle-right">
+                ${pill}
+                <label class="toggle">
+                    <input type="checkbox" ${checked} onchange="toggleModule('${key}', this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>`;
+}
+
+function thrRow(key, label, value, unit) {
+    return `
+        <div class="thr-row">
+            <div class="thr-label">${label}</div>
+            <input class="thr-input" type="number" value="${value}" data-key="${key}">
+            <div class="thr-unit">${unit}</div>
+        </div>`;
+}
+
+function wordTag(word) {
+    return `<div class="word-tag">${word} <button class="word-remove" onclick="removeBadWord('${word}')">×</button></div>`;
+}
+
+async function toggleModule(key, value) {
+    if (!State.guildId) { toast('Select a server first', 'error'); return; }
+    try {
+        await apiPatch(`/api/config/${State.guildId}`, { key, value });
+        State.config[key] = value;
+        toast(`${key.replace(/_/g,' ')} ${value ? 'enabled' : 'disabled'}`);
+    } catch(e) { toast('Failed to save', 'error'); }
+}
+
+function cycleAction(el, key) {
+    const actions = ['delete', 'warn', 'kick'];
+    const current = el.textContent.trim();
+    const next    = actions[(actions.indexOf(current) + 1) % actions.length];
+    el.textContent = next;
+    if (State.guildId) {
+        apiPatch(`/api/config/${State.guildId}`, { key, value: next })
+            .then(() => { State.config[key] = next; toast(`Action set to ${next}`); })
+            .catch(() => toast('Failed to save', 'error'));
+    }
+}
+
+async function saveProtection() {
+    if (!State.guildId) { toast('Select a server first', 'error'); return; }
+    const inputs = document.querySelectorAll('.thr-input[data-key]');
+    if (!inputs.length) return;
+    const updates = {};
+    inputs.forEach(input => { updates[input.dataset.key] = parseFloat(input.value); });
+    try {
+        await fetch(`${window.PENNY_API_URL}/api/config/${State.guildId}`, {
+            method:  'PUT',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': window.PENNY_API_KEY || '', 'Authorization': `Bearer ${State.token}` },
+            body:    JSON.stringify(updates),
+        });
+        Object.assign(State.config, updates);
+        toast('Thresholds saved');
+    } catch(e) { toast('Failed to save', 'error'); }
+}
+
+async function addBadWord() {
+    const input = document.getElementById('word-input');
+    const word  = input.value.trim().toLowerCase();
+    if (!word) return;
+    if (!State.guildId) { toast('Select a server first', 'error'); return; }
+    const list = [...(State.config.badwords_list || [])];
+    if (list.includes(word)) { toast('Word already in list', 'error'); return; }
+    list.push(word);
+    try {
+        await apiPatch(`/api/config/${State.guildId}`, { key: 'badwords_list', value: list });
+        State.config.badwords_list = list;
+        input.value = '';
+        document.getElementById('word-grid').innerHTML = list.map(w => wordTag(w)).join('');
+        toast(`"${word}" added`);
+    } catch(e) { toast('Failed to save', 'error'); }
+}
+
+async function removeBadWord(word) {
+    if (!State.guildId) return;
+    const list = (State.config.badwords_list || []).filter(w => w !== word);
+    try {
+        await apiPatch(`/api/config/${State.guildId}`, { key: 'badwords_list', value: list });
+        State.config.badwords_list = list;
+        document.getElementById('word-grid').innerHTML = list.map(w => wordTag(w)).join('') || '<span style="color:var(--text3);font-size:13px">No words added yet</span>';
+        toast(`"${word}" removed`);
+    } catch(e) { toast('Failed to save', 'error'); }
+}
+
+
+// === EXEMPTIONS ===
+// REF-APP-21
+function renderExemptions(tab) {
+    const el    = document.getElementById('content');
+    const types = { 'Roles': 'role', 'Users': 'user', 'Channels': 'channel' };
+    const type  = types[tab];
+    const labels = { role: 'Role ID', user: 'User ID', channel: 'Channel ID' };
+
+    el.innerHTML = `
+        <div class="page-heading">Exempt ${tab}</div>
+        <div class="page-sub">${tab} that Penny will never act on regardless of any rule.</div>
+        <div class="card">
+            <div class="card-header"><div class="card-title">Exempt ${tab}</div></div>
+            <div id="exempt-list" style="padding:16px 20px">
+                <div class="empty-state"><div class="empty-state-title">Loading...</div></div>
+            </div>
+            <div style="padding:0 20px 16px;display:flex;gap:8px">
+                <input class="add-input" id="exempt-input" placeholder="Paste ${labels[type]}">
+                <button class="add-btn" onclick="addExemption('${type}')">Add ${tab.slice(0,-1)}</button>
+            </div>
+        </div>`;
+
+    loadExemptions(type);
+}
+
+async function loadExemptions(type) {
+    if (!State.guildId) {
+        document.getElementById('exempt-list').innerHTML = `<div class="empty-state"><div class="empty-state-title">No server selected</div></div>`;
+        return;
+    }
+    try {
+        const data  = await apiGet(`/api/exemptions/${State.guildId}`);
+        const items = data[type + 's'] || [];
+        const list  = document.getElementById('exempt-list');
+        if (!items.length) {
+            list.innerHTML = `<div class="empty-state"><div class="empty-state-title">No exemptions yet</div></div>`;
+            return;
+        }
+        list.innerHTML = items.map(id => `
+            <div class="exempt-item">
+                <span class="exempt-name">${id}</span>
+                <button class="exempt-remove" onclick="removeExemption('${type}','${id}')">Remove</button>
+            </div>`).join('');
+    } catch(e) { console.error(e); }
+}
+
+async function addExemption(type) {
+    const input    = document.getElementById('exempt-input');
+    const targetId = input.value.trim();
+    if (!targetId || !State.guildId) return;
+    try {
+        await apiPost(`/api/exemptions/${State.guildId}`, { type, target_id: targetId, added_by: State.user?.username });
+        input.value = '';
+        toast('Exemption added');
+        loadExemptions(type);
+    } catch(e) { toast('Failed to add exemption', 'error'); }
+}
+
+async function removeExemption(type, targetId) {
+    if (!State.guildId) return;
+    try {
+        await apiDelete(`/api/exemptions/${State.guildId}`, { type, target_id: targetId });
+        toast('Exemption removed');
+        loadExemptions(type);
+    } catch(e) { toast('Failed to remove exemption', 'error'); }
+}
+
+
+// === MODERATION ===
+// REF-APP-22
+function renderModeration(tab) {
+    const el = document.getElementById('content');
+
+    if (tab === 'Mod Log') {
+        el.innerHTML = `
+            <div class="page-heading">Mod Log</div>
+            <div class="page-sub">Every action Penny has taken with full context.</div>
+            <div class="card">
+                <table class="data-table">
+                    <thead><tr><th>Event</th><th>Target</th><th>Reason</th><th>Time</th></tr></thead>
+                    <tbody id="modlog-body"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Loading...</td></tr></tbody>
+                </table>
+            </div>`;
+        loadModLog();
+    }
+
+    if (tab === 'Warnings') {
+        el.innerHTML = `
+            <div class="page-heading">Active Warnings</div>
+            <div class="page-sub">Users with outstanding warnings. ${State.config.max_warnings || 3} warnings triggers auto-kick.</div>
+            <div class="card">
+                <table class="data-table">
+                    <thead><tr><th>User</th><th>Warnings</th><th>Last Reason</th><th>Issued</th></tr></thead>
+                    <tbody id="warnings-body"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Loading...</td></tr></tbody>
+                </table>
+            </div>`;
+        loadWarnings();
+    }
+
+    if (tab === 'Audit Log') {
+        el.innerHTML = `
+            <div class="page-heading">Audit Log</div>
+            <div class="page-sub">Server integrity events — role changes, channel edits, bot additions.</div>
+            <div class="card">
+                <table class="data-table">
+                    <thead><tr><th>Event</th><th>Target</th><th>Performed By</th><th>Time</th></tr></thead>
+                    <tbody id="audit-body"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">No audit events yet</td></tr></tbody>
+                </table>
+            </div>`;
+    }
+}
+
+async function loadModLog() {
+    if (!State.guildId) return;
+    try {
+        const logs = await apiGet(`/api/logs/${State.guildId}?limit=50`);
+        const body = document.getElementById('modlog-body');
+        const badgeMap = { 'SPAM DETECTED': 'badge-spam', 'WARN ISSUED': 'badge-warn', 'BAD WORD': 'badge-warn', 'CAPS FILTER': 'badge-caps', 'RAID DETECTED': 'badge-raid', 'MASS MENTION': 'badge-spam', 'INVITE LINK': 'badge-spam' };
+        if (!logs.length) { body.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">No actions logged yet</td></tr>`; return; }
+        body.innerHTML = logs.map(l => `
+            <tr>
+                <td><span class="badge ${badgeMap[l.action] || 'badge-caps'}">${l.action}</span></td>
+                <td>${l.target_tag || l.target_id || '—'}</td>
+                <td>${l.reason || '—'}</td>
+                <td>${new Date(l.created_at).toLocaleString()}</td>
+            </tr>`).join('');
+    } catch(e) { console.error(e); }
+}
+
+async function loadWarnings() {
+    // REF-APP-23 — warnings require a user lookup; show placeholder for now
+    const body = document.getElementById('warnings-body');
+    body.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Enter a User ID to look up warnings</td></tr>`;
+}
+
+
+// === WELCOME & ROLES ===
+// REF-APP-24
+function renderWelcome(tab) {
+    const el = document.getElementById('content');
+    const c  = State.config;
+
+    if (tab === 'Welcome Message') {
+        el.innerHTML = `
+            <div class="page-heading">Welcome Message</div>
+            <div class="page-sub">Greet new members automatically when they join your server.</div>
+            <div class="card">
+                <div class="card-header"><div class="card-title">Welcome System</div></div>
+                <div class="settings-row">
+                    <div><div class="settings-label">Enable Welcome Messages</div><div class="settings-sub">Post a message when a new member joins</div></div>
+                    <label class="toggle"><input type="checkbox" id="welcome_enabled" ${c.welcome_enabled ? 'checked' : ''}><span class="slider"></span></label>
+                </div>
+                <div class="settings-row">
+                    <div><div class="settings-label">Welcome Channel ID</div><div class="settings-sub">Channel where the welcome message is posted</div></div>
+                    <input class="settings-input" id="welcome_channel_id" value="${c.welcome_channel_id || ''}" placeholder="Channel ID">
+                </div>
+                <div class="settings-row">
+                    <div><div class="settings-label">Message Template</div><div class="settings-sub">Use {user} for mention, {server} for server name</div></div>
+                    <input class="settings-input" id="welcome_message" value="${c.welcome_message || 'Welcome to {server}, {user}!'}" placeholder="Welcome message">
+                </div>
+            </div>`;
+    }
+
+    if (tab === 'Auto Role') {
+        el.innerHTML = `
+            <div class="page-heading">Auto Role</div>
+            <div class="page-sub">Automatically assign a role to every new member on join.</div>
+            <div class="card">
+                <div class="card-header"><div class="card-title">Auto Role</div></div>
+                <div class="settings-row">
+                    <div><div class="settings-label">Enable Auto Role</div><div class="settings-sub">Assign a role automatically when a new member joins</div></div>
+                    <label class="toggle"><input type="checkbox" id="autorole_enabled" ${c.autorole_enabled ? 'checked' : ''}><span class="slider"></span></label>
+                </div>
+                <div class="settings-row">
+                    <div><div class="settings-label">Role to Assign</div><div class="settings-sub">The role ID to give new members</div></div>
+                    <input class="settings-input" id="autorole_id" value="${c.autorole_id || ''}" placeholder="Role ID">
+                </div>
+            </div>`;
+    }
+}
+
+async function saveWelcome() {
+    if (!State.guildId) { toast('Select a server first', 'error'); return; }
+    const keys = ['welcome_enabled', 'welcome_channel_id', 'welcome_message', 'autorole_enabled', 'autorole_id'];
+    const updates = {};
+    keys.forEach(k => {
+        const el = document.getElementById(k);
+        if (!el) return;
+        updates[k] = el.type === 'checkbox' ? el.checked : el.value;
+    });
+    try {
+        await fetch(`${window.PENNY_API_URL}/api/config/${State.guildId}`, {
+            method:  'PUT',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': window.PENNY_API_KEY || '', 'Authorization': `Bearer ${State.token}` },
+            body:    JSON.stringify(updates),
+        });
+        Object.assign(State.config, updates);
+        toast('Welcome settings saved');
+    } catch(e) { toast('Failed to save', 'error'); }
+}
+
+
+// === USERS (OWNER ONLY) ===
+// REF-APP-25
+function renderUsers(tab) {
+    const el = document.getElementById('content');
+    el.innerHTML = `
+        <div class="page-heading">Dashboard Users</div>
+        <div class="page-sub">Manage who has access to this dashboard. Only the Platform Owner can add or remove users.</div>
+        <div class="card">
+            <table class="data-table">
+                <thead><tr><th>User</th><th>Role</th><th>Discord ID</th><th>Last Login</th><th>Actions</th></tr></thead>
+                <tbody id="users-body"><tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Loading...</td></tr></tbody>
+            </table>
+        </div>
+        <div class="card" id="add-user-card">
+            <div class="card-header"><div class="card-title">Add Admin User</div></div>
+            <div class="settings-row">
+                <div><div class="settings-label">Username</div></div>
+                <input class="settings-input" id="new-username" placeholder="Username">
+            </div>
+            <div class="settings-row">
+                <div><div class="settings-label">Password</div></div>
+                <input class="settings-input" type="password" id="new-password" placeholder="Min 8 characters">
+            </div>
+            <div class="settings-row">
+                <div><div class="settings-label">Discord ID</div><div class="settings-sub">Optional</div></div>
+                <input class="settings-input" id="new-discord" placeholder="Discord User ID">
+            </div>
+            <div class="card-footer">
+                <button class="btn-primary" onclick="createAdminUser()">Create Admin User</button>
+            </div>
+        </div>`;
+    loadUsers();
+}
+
+async function loadUsers() {
+    try {
+        const res   = await fetch(`${window.PENNY_API_URL}/auth/users`, {
+            headers: { 'Authorization': `Bearer ${State.token}` }
+        });
+        const users = await res.json();
+        const body  = document.getElementById('users-body');
+        body.innerHTML = users.map(u => `
+            <tr>
+                <td>
+                    <div class="user-cell">
+                        <div class="user-table-avatar">${u.username[0].toUpperCase()}</div>
+                        <span>${u.username}</span>
+                    </div>
+                </td>
+                <td><span class="badge ${u.role === 'owner' ? 'badge-owner' : 'badge-admin'}">${u.role}</span></td>
+                <td>${u.discord_id || '—'}</td>
+                <td>${u.last_login ? new Date(u.last_login).toLocaleString() : 'Never'}</td>
+                <td>
+                    ${u.id !== State.user?.id ? `<button class="btn-danger" style="font-size:12px;padding:5px 12px" onclick="deleteUser(${u.id})">Remove</button>` : '<span style="color:var(--text3);font-size:12px">You</span>'}
+                </td>
+            </tr>`).join('');
+    } catch(e) { console.error(e); }
+}
+
+async function createAdminUser() {
+    const username   = document.getElementById('new-username').value.trim();
+    const password   = document.getElementById('new-password').value;
+    const discord_id = document.getElementById('new-discord').value.trim();
+
+    if (!username || !password) { toast('Username and password required', 'error'); return; }
+    if (password.length < 8)   { toast('Password must be 8+ characters', 'error'); return; }
+
+    try {
+        await fetch(`${window.PENNY_API_URL}/auth/users`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
+            body:    JSON.stringify({ username, password, discord_id: discord_id || undefined }),
+        });
+        document.getElementById('new-username').value = '';
+        document.getElementById('new-password').value = '';
+        document.getElementById('new-discord').value  = '';
+        toast(`Admin user "${username}" created`);
+        loadUsers();
+    } catch(e) { toast('Failed to create user', 'error'); }
+}
+
+function showAddUserModal() {
+    document.getElementById('add-user-card')?.scrollIntoView({ behavior: 'smooth' });
+}
+
+async function deleteUser(id) {
+    if (!confirm('Remove this user from the dashboard?')) return;
+    try {
+        await fetch(`${window.PENNY_API_URL}/auth/users/${id}`, {
+            method:  'DELETE',
+            headers: { 'Authorization': `Bearer ${State.token}` },
+        });
+        toast('User removed');
+        loadUsers();
+    } catch(e) { toast('Failed to remove user', 'error'); }
+}
+
+
+// === SETTINGS ===
+// REF-APP-26
+function renderSettings(tab) {
+    const el = document.getElementById('content');
+    const c  = State.config;
+
+    if (tab === 'General') {
+        el.innerHTML = `
+            <div class="page-heading">General Settings</div>
+            <div class="page-sub">Core Penny configuration for this server.</div>
+            <div class="card">
+                <div class="card-header"><div class="card-title">General</div></div>
+                <div class="settings-row">
+                    <div><div class="settings-label">Test Mode</div><div class="settings-sub">Penny logs detections but takes no action — safe for testing</div></div>
+                    <label class="toggle"><input type="checkbox" id="test_mode" ${c.test_mode ? 'checked' : ''}><span class="slider"></span></label>
+                </div>
+                <div class="settings-row">
+                    <div><div class="settings-label">Log Channel ID</div><div class="settings-sub">Channel where Penny posts all security events</div></div>
+                    <input class="settings-input" id="log_channel_id" value="${c.log_channel_id || ''}" placeholder="Channel ID">
+                </div>
+                <div class="settings-row">
+                    <div><div class="settings-label">Immune Role ID</div><div class="settings-sub">This role is never actioned regardless of any other setting</div></div>
+                    <input class="settings-input" id="immune_role_id" value="${c.immune_role_id || ''}" placeholder="Role ID">
+                </div>
+                <div class="settings-row">
+                    <div><div class="settings-label">Max Warnings</div><div class="settings-sub">Number of warnings before auto-kick triggers</div></div>
+                    <input class="settings-input" type="number" id="max_warnings" value="${c.max_warnings || 3}" style="width:80px">
+                </div>
+                <div class="card-footer">
+                    <button class="btn-primary" onclick="saveGeneral()">Save General Settings</button>
+                </div>
+            </div>`;
+    }
+
+    if (tab === 'Appearance') {
+        el.innerHTML = `
+            <div class="page-heading">Dashboard Appearance</div>
+            <div class="page-sub">Personalize how this dashboard looks.</div>
+            <div class="card">
+                <div class="card-header"><div class="card-title">Theme & Colors</div></div>
+                <div class="settings-row">
+                    <div><div class="settings-label">Theme</div><div class="settings-sub">Overall color mode</div></div>
+                    <div class="theme-row">
+                        <div class="theme-opt active" onclick="setTheme(this,'light')">Light</div>
+                        <div class="theme-opt" onclick="setTheme(this,'slate')">Slate</div>
+                        <div class="theme-opt" onclick="setTheme(this,'dark')">Dark</div>
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div><div class="settings-label">Accent Color</div><div class="settings-sub">Buttons, active states, and highlights</div></div>
+                    <div class="swatch-row">
+                        <div class="swatch active" style="background:#1d4ed8" onclick="setAccent(this,'#1d4ed8','#eff6ff','#bfdbfe')"></div>
+                        <div class="swatch" style="background:#059669" onclick="setAccent(this,'#059669','#ecfdf5','#a7f3d0')"></div>
+                        <div class="swatch" style="background:#7c3aed" onclick="setAccent(this,'#7c3aed','#f5f3ff','#ddd6fe')"></div>
+                        <div class="swatch" style="background:#dc2626" onclick="setAccent(this,'#dc2626','#fef2f2','#fecaca')"></div>
+                        <div class="swatch" style="background:#d97706" onclick="setAccent(this,'#d97706','#fffbeb','#fde68a')"></div>
+                        <div class="swatch" style="background:#0891b2" onclick="setAccent(this,'#0891b2','#ecfeff','#a5f3fc')"></div>
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div><div class="settings-label">Upload Avatar</div><div class="settings-sub">Replace Penny's portrait in the navbar</div></div>
+                    <input type="file" id="avatar-upload" accept="image/*" onchange="uploadAvatar(this)" style="font-size:13px">
+                </div>
+                <div class="settings-row">
+                    <div><div class="settings-label">Dashboard Title</div><div class="settings-sub">Shown in the browser tab</div></div>
+                    <input class="settings-input" id="dash-title" value="${document.title}" placeholder="Dashboard title">
+                </div>
+                <div class="card-footer">
+                    <button class="btn-primary" onclick="saveAppearance()">Save Appearance</button>
+                </div>
+            </div>`;
+    }
+
+    if (tab === 'Danger Zone') {
+        el.innerHTML = `
+            <div class="page-heading">Danger Zone</div>
+            <div class="page-sub">These actions are permanent and cannot be undone.</div>
+            <div class="card" style="border-color:#fecaca">
+                <div class="danger-header"><div class="danger-title">Irreversible Actions</div><div class="danger-sub">Proceed with caution — there is no undo.</div></div>
+                <div class="settings-row"><div><div class="settings-label">Reset All Config</div><div class="settings-sub">Wipes all settings and returns Penny to defaults for this server</div></div><button class="btn-danger" onclick="dangerResetConfig()">Reset Config</button></div>
+                <div class="settings-row"><div><div class="settings-label">Clear Mod Logs</div><div class="settings-sub">Permanently deletes all moderation log entries</div></div><button class="btn-danger" onclick="dangerClearLogs()">Clear Logs</button></div>
+                <div class="settings-row"><div><div class="settings-label">Clear All Warnings</div><div class="settings-sub">Removes all active warnings across all users</div></div><button class="btn-danger" onclick="dangerClearWarnings()">Clear Warnings</button></div>
+            </div>`;
+    }
+}
+
+async function saveGeneral() {
+    if (!State.guildId) { toast('Select a server first', 'error'); return; }
+    const updates = {
+        test_mode:       document.getElementById('test_mode').checked,
+        log_channel_id:  document.getElementById('log_channel_id').value.trim(),
+        immune_role_id:  document.getElementById('immune_role_id').value.trim(),
+        max_warnings:    parseInt(document.getElementById('max_warnings').value),
+    };
+    try {
+        await fetch(`${window.PENNY_API_URL}/api/config/${State.guildId}`, {
+            method:  'PUT',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': window.PENNY_API_KEY || '', 'Authorization': `Bearer ${State.token}` },
+            body:    JSON.stringify(updates),
+        });
+        Object.assign(State.config, updates);
+        const badge = document.getElementById('test-badge');
+        updates.test_mode ? badge.classList.remove('hidden') : badge.classList.add('hidden');
+        toast('General settings saved');
+    } catch(e) { toast('Failed to save', 'error'); }
+}
+
+function setTheme(el, theme) {
+    document.querySelectorAll('.theme-opt').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    const r = document.documentElement;
+    if (theme === 'dark') {
+        r.style.setProperty('--bg','#0f172a'); r.style.setProperty('--surface','#1e293b');
+        r.style.setProperty('--surface2','#273344'); r.style.setProperty('--text','#f1f5f9');
+        r.style.setProperty('--text2','#94a3b8'); r.style.setProperty('--text3','#64748b');
+        r.style.setProperty('--border','#334155'); r.style.setProperty('--border2','#475569');
+    } else if (theme === 'slate') {
+        r.style.setProperty('--bg','#e8edf4'); r.style.setProperty('--surface','#f4f7fb');
+        r.style.setProperty('--surface2','#edf1f7'); r.style.setProperty('--text','#1e293b');
+        r.style.setProperty('--text2','#64748b'); r.style.setProperty('--text3','#94a3b8');
+        r.style.setProperty('--border','#d0dae8'); r.style.setProperty('--border2','#c0ccdc');
+    } else {
+        r.style.setProperty('--bg','#f3f4f6'); r.style.setProperty('--surface','#ffffff');
+        r.style.setProperty('--surface2','#f8fafc'); r.style.setProperty('--text','#111827');
+        r.style.setProperty('--text2','#6b7280'); r.style.setProperty('--text3','#9ca3af');
+        r.style.setProperty('--border','#e5e7eb'); r.style.setProperty('--border2','#d1d5db');
+    }
+    localStorage.setItem('penny_theme', theme);
+}
+
+function setAccent(el, color, bgLight, border) {
+    document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+    el.classList.add('active');
+    document.documentElement.style.setProperty('--accent', color);
+    document.documentElement.style.setProperty('--accent-hover', color);
+    document.documentElement.style.setProperty('--accent-light', bgLight);
+    document.documentElement.style.setProperty('--accent-border', border);
+    localStorage.setItem('penny_accent', JSON.stringify({ color, bgLight, border }));
+}
+
+function uploadAvatar(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        const src = e.target.result;
+        localStorage.setItem('penny_avatar', src);
+        applyAvatar(src);
+        toast('Avatar updated');
+    };
+    reader.readAsDataURL(file);
+}
+
+function applyAvatar(src) {
+    const navAvatar   = document.getElementById('nav-avatar');
+    const loginAvatar = document.getElementById('login-avatar');
+    if (navAvatar)   navAvatar.innerHTML   = `<img src="${src}" alt="Penny">`;
+    if (loginAvatar) loginAvatar.innerHTML = `<img src="${src}" alt="Penny">`;
+}
+
+function saveAppearance() {
+    const title = document.getElementById('dash-title')?.value;
+    if (title) { document.title = title; localStorage.setItem('penny_title', title); }
+    toast('Appearance saved');
+}
+
+// REF-APP-27 — restore saved appearance on load
+function restoreAppearance() {
+    const theme  = localStorage.getItem('penny_theme');
+    const accent = localStorage.getItem('penny_accent');
+    const avatar = localStorage.getItem('penny_avatar');
+    const title  = localStorage.getItem('penny_title');
+    if (theme)  setTheme({ classList: { add: ()=>{}, remove: ()=>{} } }, theme);
+    if (accent) { const a = JSON.parse(accent); document.documentElement.style.setProperty('--accent', a.color); document.documentElement.style.setProperty('--accent-light', a.bgLight); document.documentElement.style.setProperty('--accent-border', a.border); }
+    if (avatar) applyAvatar(avatar);
+    if (title)  document.title = title;
+}
+
+function dangerResetConfig()    { if (confirm('Reset ALL config for this server? This cannot be undone.')) toast('Config reset — feature coming soon', 'error'); }
+function dangerClearLogs()      { if (confirm('Clear ALL mod logs? This cannot be undone.'))              toast('Logs cleared — feature coming soon', 'error'); }
+function dangerClearWarnings()  { if (confirm('Clear ALL warnings? This cannot be undone.'))              toast('Warnings cleared — feature coming soon', 'error'); }
+
+// REF-APP-28 — call on load
+restoreAppearance();
