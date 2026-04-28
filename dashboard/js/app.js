@@ -391,6 +391,7 @@ async function apiGet(path) {
     const res = await fetch(`${window.PENNY_API_URL}${path}`, {
         headers: { 'Authorization': `Bearer ${State.token}` }
     });
+    if (res.status === 401) { clearSession(); showLogin(); return; }
     if (!res.ok) throw new Error(`GET ${path} failed`);
     return res.json();
 }
@@ -402,6 +403,7 @@ async function apiPost(path, body) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
         body:    JSON.stringify(body),
     });
+    if (res.status === 401) { clearSession(); showLogin(); return; }
     if (!res.ok) throw new Error(`POST ${path} failed`);
     return res.json();
 }
@@ -413,6 +415,7 @@ async function apiPatch(path, body) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
         body:    JSON.stringify(body),
     });
+    if (res.status === 401) { clearSession(); showLogin(); return; }
     if (!res.ok) throw new Error(`PATCH ${path} failed`);
     return res.json();
 }
@@ -424,6 +427,7 @@ async function apiPut(path, body) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
         body:    JSON.stringify(body),
     });
+    if (res.status === 401) { clearSession(); showLogin(); return; }
     if (!res.ok) throw new Error(`PUT ${path} failed`);
     return res.json();
 }
@@ -435,6 +439,7 @@ async function apiDelete(path, body) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
         body:    body ? JSON.stringify(body) : undefined,
     });
+    if (res.status === 401) { clearSession(); showLogin(); return; }
     if (!res.ok) throw new Error(`DELETE ${path} failed`);
     return res.json();
 }

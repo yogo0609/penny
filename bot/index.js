@@ -30,9 +30,10 @@ const client = new Client({
 
 // === IN-MEMORY STATE ===
 // REF-BOT-02
-const spamTracker = new Map();
-const raidTracker = new Map();
-const configCache = new Map();
+const spamTracker    = new Map();
+const raidTracker    = new Map();
+const configCache    = new Map();
+const purgeInitiator = new Map();
 
 
 // === CONFIG LOADER ===
@@ -80,8 +81,7 @@ async function isChannelExempt(guildId, channelId) {
 
 // === SECURITY LOGGER ===
 // REF-BOT-06
-// Posts security events to the security log channel and saves to mod_log database
-async function log(guild, config, type, description, color = 0xff4444) {
+async function log(guild, config, type, description, color = 0xff4444, targetId = null, targetTag = null) {
     console.log(`[${type}] ${description}`);
 
     const channelId = config.log_channel_id;
@@ -105,9 +105,11 @@ async function log(guild, config, type, description, color = 0xff4444) {
     // REF-BOT-07
     try {
         await api.post(`/api/logs/${guild.id}`, {
-            action:    type,
-            reason:    description,
-            moderator: 'Penny',
+            action:     type,
+            target_id:  targetId,
+            target_tag: targetTag,
+            moderator:  'Penny',
+            reason:     description,
         });
     } catch {}
 }
@@ -157,7 +159,6 @@ async function issueWarning(member, reason, config) {
 
 // === INLINE WARNING HELPER ===
 // REF-BOT-09a
-// Posts a visible warning in the channel that auto-deletes after 8 seconds
 async function inlineWarn(message, reason) {
     const warning = await message.channel.send(
         `⚠️ <@${message.author.id}> — ${reason} Repeated violations may result in escalated action.`
@@ -168,7 +169,6 @@ async function inlineWarn(message, reason) {
 
 // === AUDIT LOG HELPER ===
 // REF-BOT-24
-// Posts audit events to the audit log channel and saves to audit_log database
 async function audit(guild, event, category, targetId, targetTag, moderator, detail, color = 0x3b82f6) {
     try {
         const config    = await getConfig(guild.id);
@@ -181,9 +181,9 @@ async function audit(guild, event, category, targetId, targetTag, moderator, det
                     .setColor(color)
                     .setTimestamp();
 
-                if (targetTag) embed.addFields({ name: 'Target',    value: targetTag,                              inline: true  });
-                if (moderator) embed.addFields({ name: 'By',        value: moderator,                              inline: true  });
-                if (detail)    embed.addFields({ name: 'Detail',    value: detail.replace(/\*\*/g, '').replace(/`/g, ''), inline: false });
+                if (targetTag) embed.addFields({ name: 'Target', value: targetTag,                               inline: true  });
+                if (moderator) embed.addFields({ name: 'By',     value: moderator,                               inline: true  });
+                if (detail)    embed.addFields({ name: 'Detail', value: detail.replace(/\*\*/g, '').replace(/`/g, ''), inline: false });
 
                 await channel.send({ embeds: [embed] }).catch(() => {});
             }
@@ -207,7 +207,6 @@ client.once('clientReady', async () => {
     console.log(`✅ ${client.user.tag} is online`);
     console.log(`🔗 Connected to API at ${process.env.API_URL}`);
 
-    // REF-BOT-00 — Register guilds with API on startup
     try {
         const guilds = client.guilds.cache.map(g => ({
             id:   g.id,
@@ -255,7 +254,8 @@ client.on('messageCreate', async (message) => {
 
         if (recent.length > max) {
             await log(message.guild, config, 'SPAM DETECTED',
-                `**User:** ${message.author.tag}\n**Channel:** ${message.channel.name}\n**Messages:** ${recent.length} in ${window / 1000}s`
+                `**User:** ${message.author.tag}\n**Channel:** ${message.channel.name}\n**Messages:** ${recent.length} in ${window / 1000}s`,
+                0xff4444, message.author.id, message.author.tag
             );
 
             if (!config.test_mode) {
@@ -264,6 +264,7 @@ client.on('messageCreate', async (message) => {
                     const toDelete = msgs.filter(m => m.author.id === message.author.id);
                     await message.channel.bulkDelete(toDelete).catch(() => {});
                     await inlineWarn(message, 'Your messages were removed for spamming.');
+                    await issueWarning(member, 'Spam detected', config);
                 } else {
                     await takeAction(member, config.spam_action || 'warn', 'Spam detected', config);
                 }
@@ -284,13 +285,15 @@ client.on('messageCreate', async (message) => {
 
         if (found) {
             await log(message.guild, config, 'BAD WORD',
-                `**User:** ${message.author.tag}\n**Channel:** ${message.channel.name}\n**Trigger:** \`${found}\``
+                `**User:** ${message.author.tag}\n**Channel:** ${message.channel.name}\n**Trigger:** \`${found}\``,
+                0xff4444, message.author.id, message.author.tag
             );
 
             if (!config.test_mode) {
                 if (config.badwords_action === 'delete') {
                     await message.delete().catch(() => {});
                     await inlineWarn(message, 'Your message was removed for containing prohibited content.');
+                    await issueWarning(member, `Prohibited word: ${found}`, config);
                 } else {
                     await takeAction(member, config.badwords_action || 'warn', `Prohibited word: ${found}`, config);
                 }
@@ -309,13 +312,15 @@ client.on('messageCreate', async (message) => {
             const ratio = (message.content.match(/[A-Z]/g) || []).length / letters.length;
             if (ratio >= (config.caps_threshold || 0.7)) {
                 await log(message.guild, config, 'CAPS FILTER',
-                    `**User:** ${message.author.tag}\n**Channel:** ${message.channel.name}`
+                    `**User:** ${message.author.tag}\n**Channel:** ${message.channel.name}`,
+                    0xff4444, message.author.id, message.author.tag
                 );
 
                 if (!config.test_mode) {
                     if (config.caps_action === 'delete') {
                         await message.delete().catch(() => {});
                         await inlineWarn(message, 'Please avoid excessive use of capital letters.');
+                        await issueWarning(member, 'Caps filter triggered', config);
                     } else {
                         await takeAction(member, config.caps_action || 'warn', 'Caps filter triggered', config);
                     }
@@ -333,13 +338,15 @@ client.on('messageCreate', async (message) => {
         const mentionCount = message.mentions.users.size + message.mentions.roles.size;
         if (mentionCount >= (config.mass_mention_max || 5)) {
             await log(message.guild, config, 'MASS MENTION',
-                `**User:** ${message.author.tag}\n**Channel:** ${message.channel.name}\n**Mentions:** ${mentionCount}`
+                `**User:** ${message.author.tag}\n**Channel:** ${message.channel.name}\n**Mentions:** ${mentionCount}`,
+                0xff4444, message.author.id, message.author.tag
             );
 
             if (!config.test_mode) {
                 if (config.mass_mention_action === 'delete') {
                     await message.delete().catch(() => {});
                     await inlineWarn(message, 'Your message was removed for containing too many mentions.');
+                    await issueWarning(member, `Mass mention (${mentionCount})`, config);
                 } else {
                     await takeAction(member, config.mass_mention_action || 'warn', `Mass mention (${mentionCount})`, config);
                 }
@@ -356,13 +363,15 @@ client.on('messageCreate', async (message) => {
         const inviteRegex = /(discord\.gg|discord\.com\/invite)\/\S+/i;
         if (inviteRegex.test(message.content)) {
             await log(message.guild, config, 'INVITE LINK',
-                `**User:** ${message.author.tag}\n**Channel:** ${message.channel.name}`
+                `**User:** ${message.author.tag}\n**Channel:** ${message.channel.name}`,
+                0xff4444, message.author.id, message.author.tag
             );
 
             if (!config.test_mode) {
                 if (config.antilink_action === 'delete') {
                     await message.delete().catch(() => {});
                     await inlineWarn(message, 'Posting invite links is not allowed in this server.');
+                    await issueWarning(member, 'Posted invite link', config);
                 } else {
                     await takeAction(member, config.antilink_action || 'warn', 'Posted invite link', config);
                 }
@@ -411,7 +420,7 @@ client.on('guildMemberAdd', async (member) => {
         if (recent.length >= max) {
             await log(member.guild, config, '🚨 RAID DETECTED',
                 `**${recent.length} joins** in ${window / 1000}s\n**Latest:** ${member.user.tag}`,
-                0xff0000
+                0xff0000, member.id, member.user.tag
             );
             if (!config.test_mode) {
                 await takeAction(member, config.raid_action || 'kick', 'Raid detected', config);
@@ -428,7 +437,7 @@ client.on('guildMemberAdd', async (member) => {
         if (accountAge < minDays) {
             await log(member.guild, config, 'ACCOUNT AGE GATE',
                 `**User:** ${member.user.tag}\n**Account Age:** ${Math.floor(accountAge)} days\n**Minimum:** ${minDays} days`,
-                0xffa500
+                0xffa500, member.id, member.user.tag
             );
             if (!config.test_mode) {
                 await member.kick(`Account too new (${Math.floor(accountAge)} days old)`);
@@ -447,16 +456,23 @@ client.on('guildMemberAdd', async (member) => {
     }
 
     // === WELCOME MESSAGE ===
-    // REF-BOT-17
-    if (config.welcome_enabled && config.welcome_channel_id) {
-        const channel = member.guild.channels.cache.get(config.welcome_channel_id);
-        if (channel) {
-            const msg = (config.welcome_message || 'Welcome to the server, {user}!')
-                .replace('{user}',   `<@${member.id}>`)
-                .replace('{server}', member.guild.name);
-            await channel.send(msg).catch(() => {});
+        // REF-BOT-17
+        if (config.welcome_enabled && config.welcome_channel_id) {
+            try {
+                const channel = member.guild.channels.cache.get(config.welcome_channel_id)
+                    || await member.guild.channels.fetch(config.welcome_channel_id).catch(() => null);
+                if (channel) {
+                    const msg = (config.welcome_message || 'Welcome to the server, {user}!')
+                        .replace('{user}',   `<@${member.id}>`)
+                        .replace('{server}', member.guild.name);
+                    await channel.send(msg);
+                } else {
+                    console.error(`[WELCOME] Channel ${config.welcome_channel_id} not found`);
+                }
+            } catch(err) {
+                console.error(`[WELCOME] Failed to send welcome message: ${err.message}`);
+            }
         }
-    }
 
     // === AUTO ROLE ===
     // REF-BOT-18
@@ -478,20 +494,20 @@ client.on('interactionCreate', async (interaction) => {
 
     try {
         switch (interaction.commandName) {
-            case 'ban':            await handleBan(interaction, api);            break;
-            case 'unban':          await handleUnban(interaction, api);          break;
-            case 'kick':           await handleKick(interaction, api);           break;
-            case 'mute':           await handleMute(interaction, api);           break;
-            case 'unmute':         await handleUnmute(interaction, api);         break;
-            case 'warn':           await handleWarn(interaction, api);           break;
-            case 'softban':        await handleSoftban(interaction, api);        break;
-            case 'purge':          await handlePurge(interaction, api);               break;
-            case 'warnings':       await handleWarnings(interaction, api);       break;
-            case 'clearwarnings':  await handleClearWarnings(interaction, api);  break;
-            case 'lockdown':       await handleLockdown(interaction);            break;
-            case 'serverlockdown': await handleServerLockdown(interaction);      break;
-            case 'userinfo':       await handleUserinfo(interaction);            break;
-            case 'bans':           await handleBans(interaction, api);           break;
+            case 'ban':            await handleBan(interaction, api);                   break;
+            case 'unban':          await handleUnban(interaction, api);                 break;
+            case 'kick':           await handleKick(interaction, api);                  break;
+            case 'mute':           await handleMute(interaction, api);                  break;
+            case 'unmute':         await handleUnmute(interaction, api);                break;
+            case 'warn':           await handleWarn(interaction, api);                  break;
+            case 'softban':        await handleSoftban(interaction, api);               break;
+            case 'purge':          await handlePurge(interaction, api, purgeInitiator); break;
+            case 'warnings':       await handleWarnings(interaction, api);              break;
+            case 'clearwarnings':  await handleClearWarnings(interaction, api);         break;
+            case 'lockdown':       await handleLockdown(interaction);                   break;
+            case 'serverlockdown': await handleServerLockdown(interaction);             break;
+            case 'userinfo':       await handleUserinfo(interaction);                   break;
+            case 'bans':           await handleBans(interaction, api);                  break;
         }
     } catch (err) {
         console.error(`[SLASH] Error handling /${interaction.commandName}:`, err.message);
@@ -552,14 +568,9 @@ client.on('messageDeleteBulk', async (messages) => {
     const config = await getConfig(first.guild.id);
     if (!config.audit_messages_bulk) return;
 
-    let moderator = null;
-    try {
-        const auditLogs = await first.guild.fetchAuditLogs({ type: AuditLogEvent.MessageBulkDelete, limit: 1 });
-        const entry     = auditLogs.entries.first();
-        if (entry && Date.now() - entry.createdTimestamp < 5000) {
-            moderator = entry.executor?.tag;
-        }
-    } catch {}
+    const key       = `${first.guild.id}:${first.channel.id}`;
+    const moderator = purgeInitiator.get(key) || null;
+    if (moderator) purgeInitiator.delete(key);
 
     await audit(first.guild, 'BULK DELETE', 'messages',
         null, null, moderator,
@@ -591,7 +602,6 @@ client.on('guildMemberRemove', async (member) => {
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
     const config = await getConfig(newMember.guild.id);
 
-    // Nickname change
     if (config.audit_members_nick && oldMember.nickname !== newMember.nickname) {
         await audit(newMember.guild, 'NICKNAME CHANGED', 'members',
             newMember.id, newMember.user.tag, null,
@@ -600,7 +610,6 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         );
     }
 
-    // Role added
     if (config.audit_members_roles) {
         const addedRoles = newMember.roles.cache.filter(r => !oldMember.roles.cache.has(r.id));
         for (const [, role] of addedRoles) {
@@ -611,7 +620,6 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
             );
         }
 
-        // Role removed
         const removedRoles = oldMember.roles.cache.filter(r => !newMember.roles.cache.has(r.id));
         for (const [, role] of removedRoles) {
             await audit(newMember.guild, 'ROLE REMOVED', 'members',

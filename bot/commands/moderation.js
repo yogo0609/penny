@@ -309,7 +309,7 @@ async function handleSoftban(interaction, api) {
 }
 
 // REF-CMD-09
-async function handlePurge(interaction, api) {
+async function handlePurge(interaction, api, purgeInitiator) {
     const amount = interaction.options.getInteger('amount');
     const user   = interaction.options.getUser('user');
 
@@ -321,19 +321,12 @@ async function handlePurge(interaction, api) {
 
     let messages = await interaction.channel.messages.fetch({ limit: amount });
     if (user) messages = messages.filter(m => m.author.id === user.id);
+    
+    const key = `${interaction.guild.id}:${interaction.channel.id}`;
+    if (purgeInitiator) purgeInitiator.set(key, interaction.user.tag);
 
     const deleted = await interaction.channel.bulkDelete(messages, true);
     await interaction.editReply({ content: `✅ Deleted ${deleted.size} message(s).` });
-    try {
-    await api.post(`/api/audit/${interaction.guild.id}`, {
-        event:      'BULK DELETE',
-        category:   'messages',
-        target_id:  null,
-        target_tag: null,
-        moderator:  interaction.user.tag,
-        detail:     `Channel: ${interaction.channel.name} | Count: ${deleted.size} messages deleted`,
-    });
-} catch {}
 
 }
 
