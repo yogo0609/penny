@@ -83,19 +83,19 @@ async function isChannelExempt(guildId, channelId) {
 // Checks module-specific exemptions first, then falls back to global exemptions
 async function isModuleExempt(guildId, module, member, channelId) {
     try {
-        // Check module-specific exemptions
-        const res     = await api.get(`/api/module-exemptions/${guildId}/${module}`);
+        const res = await api.get(`/api/module-exemptions/${guildId}/${module}`);
         const { roles, users, channels } = res.data;
 
-        if (users.includes(member.id))                              return true;
-        if (channels.includes(channelId))                           return true;
-        if (member.roles.cache.some(r => roles.includes(r.id)))    return true;
+        // Now full objects, extract target_id
+        if (users.some(u => u.target_id === member.id))                                    return true;
+        if (channels.some(c => c.target_id === channelId))                                 return true;
+        if (member.roles.cache.some(r => roles.some(ro => ro.target_id === r.id)))         return true;
 
         // Fall back to global exemptions
         const global = await api.get(`/api/exemptions/${guildId}`);
-        if (global.data.users.includes(member.id))                                  return true;
-        if (global.data.channels.includes(channelId))                               return true;
-        if (member.roles.cache.some(r => global.data.roles.includes(r.id)))        return true;
+        if (global.data.users.includes(member.id))                                         return true;
+        if (global.data.channels.includes(channelId))                                      return true;
+        if (member.roles.cache.some(r => global.data.roles.includes(r.id)))                return true;
 
         return false;
     } catch {
@@ -329,6 +329,37 @@ async function inlineWarn(message, reason) {
     if (warning) setTimeout(() => warning.delete().catch(() => {}), 8000);
 }
 
+// === PANIC COMMAND HANDLER ===
+// REF-BOT-29b
+async function handlePanicCommand(interaction) {
+    const config = await getConfig(interaction.guild.id);
+
+    // Check if user has an authorized role
+    const authorizedRoles = config.panic_authorized_roles || [];
+    const hasPermission   = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator) ||
+        interaction.member.roles.cache.some(r => authorizedRoles.includes(r.id));
+
+    if (!hasPermission) {
+        return interaction.reply({ content: '❌ You are not authorized to use Panic Mode.', ephemeral: true });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+        const panicRes = await api.get(`/api/panic/${interaction.guild.id}`);
+        const active   = panicRes.data.active;
+
+        if (active) {
+            await deactivatePanic(interaction.guild, interaction.user.tag);
+            await interaction.editReply({ content: '✅ Panic Mode deactivated — channels restored.' });
+        } else {
+            await activatePanic(interaction.guild, interaction.user.tag);
+            await interaction.editReply({ content: '🚨 Panic Mode activated — all channels locked.' });
+        }
+    } catch(err) {
+        await interaction.editReply({ content: '❌ Failed to toggle Panic Mode.' });
+    }
+}
 
 // === AUDIT LOG HELPER ===
 // REF-BOT-24
@@ -364,6 +395,121 @@ async function audit(guild, event, category, targetId, targetTag, moderator, det
     } catch {}
 }
 
+// === PANIC MODE ===
+// REF-BOT-29
+
+async function activatePanic(guild, triggeredBy) {
+    try {
+        // Snapshot current channel permissions before locking
+        const snapshot = [];
+        const channels = guild.channels.cache.filter(c =>
+            c.type === 0 || c.type === 2 || c.type === 4
+        );
+
+        for (const [, channel] of channels) {
+            const overwrite = channel.permissionOverwrites.cache.get(guild.id);
+            snapshot.push({
+                channelId:   channel.id,
+                allow:       overwrite?.allow.bitfield.toString() || '0',
+                deny:        overwrite?.deny.bitfield.toString()  || '0',
+            });
+        }
+
+        // Save panic state with snapshot
+        await api.post(`/api/panic/${guild.id}/activate`, {
+            triggered_by:     triggeredBy,
+            channel_snapshot: snapshot,
+        });
+
+        // Lock all channels
+        for (const [, channel] of channels) {
+            await channel.permissionOverwrites.edit(guild.id, {
+                SendMessages: false,
+            }).catch(() => {});
+        }
+
+        // Alert in log channel
+        const config  = await getConfig(guild.id);
+        const alertChannelId = config.panic_alert_channel || config.log_channel_id;
+        const alertRoleId    = config.panic_alert_role;
+        const alertChannel   = guild.channels.cache.get(alertChannelId);
+
+        if (alertChannel) {
+            const { EmbedBuilder } = require('discord.js');
+            const embed = new EmbedBuilder()
+                .setTitle('🚨 PANIC MODE ACTIVATED')
+                .setColor(0xff0000)
+                .setDescription('All channels have been locked. New members will be kicked automatically.')
+                .addFields({ name: 'Triggered by', value: triggeredBy })
+                .setTimestamp();
+            const content = alertRoleId ? `<@&${alertRoleId}>` : '';
+            await alertChannel.send({ content, embeds: [embed] }).catch(() => {});
+        }
+
+        // Log to mod log
+        await api.post(`/api/logs/${guild.id}`, {
+            action:     'PANIC MODE ACTIVATED',
+            target_id:  null,
+            target_tag: null,
+            moderator:  triggeredBy,
+            reason:     'Panic mode activated — all channels locked',
+        }).catch(() => {});
+
+        console.log(`[PANIC] Activated in ${guild.name} by ${triggeredBy}`);
+    } catch(err) {
+        console.error(`[PANIC] Failed to activate: ${err.message}`);
+    }
+}
+
+async function deactivatePanic(guild, deactivatedBy) {
+    try {
+        // Get snapshot
+        const panicRes  = await api.get(`/api/panic/${guild.id}`);
+        const snapshot  = JSON.parse(panicRes.data.channel_snapshot || '[]');
+
+        // Restore channel permissions
+        for (const snap of snapshot) {
+            const channel = guild.channels.cache.get(snap.channelId);
+            if (!channel) continue;
+            await channel.permissionOverwrites.edit(guild.id, {
+                SendMessages: null,
+            }).catch(() => {});
+        }
+
+        // Mark panic inactive
+        await api.post(`/api/panic/${guild.id}/deactivate`, {
+            deactivated_by: deactivatedBy,
+        });
+
+        // Alert in log channel
+        const config       = await getConfig(guild.id);
+        const alertChannel = guild.channels.cache.get(config.panic_alert_channel || config.log_channel_id);
+
+        if (alertChannel) {
+            const { EmbedBuilder } = require('discord.js');
+            const embed = new EmbedBuilder()
+                .setTitle('✅ PANIC MODE DEACTIVATED')
+                .setColor(0x22c55e)
+                .setDescription('All channels have been unlocked.')
+                .addFields({ name: 'Deactivated by', value: deactivatedBy })
+                .setTimestamp();
+            await alertChannel.send({ embeds: [embed] }).catch(() => {});
+        }
+
+        // Log to mod log
+        await api.post(`/api/logs/${guild.id}`, {
+            action:     'PANIC MODE DEACTIVATED',
+            target_id:  null,
+            target_tag: null,
+            moderator:  deactivatedBy,
+            reason:     'Panic mode deactivated — channels restored',
+        }).catch(() => {});
+
+        console.log(`[PANIC] Deactivated in ${guild.name} by ${deactivatedBy}`);
+    } catch(err) {
+        console.error(`[PANIC] Failed to deactivate: ${err.message}`);
+    }
+}
 
 // === READY ===
 client.once('clientReady', async () => {
@@ -630,8 +776,21 @@ client.on('guildMemberAdd', async (member) => {
         }
     }
 
+    // === PANIC MODE JOIN KICK ===
+    // REF-BOT-29a
+    try {
+        const panicRes = await api.get(`/api/panic/${member.guild.id}`);
+        if (panicRes.data.active) {
+            await member.send(
+                `⚠️ **${member.guild.name}** is currently in Panic Mode. You cannot join at this time.`
+            ).catch(() => {});
+            await member.kick('Panic mode active');
+            return;
+        }
+    } catch {}
+
     // === BOT JOIN DETECTION ===
-    // REF-BOT-23
+    // 	REF-BOT-23
     if (member.user.bot) {
         await audit(member.guild, 'BOT ADDED', 'server',
             member.id, member.user.tag, null,
@@ -748,7 +907,8 @@ client.on('interactionCreate', async (interaction) => {
             case 'userinfo':       await handleUserinfo(interaction);                   break;
             case 'bans':           await handleBans(interaction, api);                  break;
             case 'tempban':        await handleTempban(interaction, api);               break;
-            case 'tempmute':       await handleTempmute(interaction, api);
+            case 'tempmute':       await handleTempmute(interaction, api);              break;
+            case 'panic':          await handlePanicCommand(interaction);               break;
         }
     } catch (err) {
         console.error(`[SLASH] Error handling /${interaction.commandName}:`, err.message);

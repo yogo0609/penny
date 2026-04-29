@@ -124,6 +124,7 @@ db.exec(`
         module      TEXT NOT NULL,
         type        TEXT NOT NULL,
         target_id   TEXT NOT NULL,
+        note        TEXT,
         added_by    TEXT NOT NULL,
         added_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(guild_id, module, type, target_id)
@@ -157,11 +158,23 @@ db.exec(`
         icon  TEXT
     );
 
+    -- REF-DB-48
+    CREATE TABLE IF NOT EXISTS panic_state (
+        guild_id        TEXT PRIMARY KEY,
+        active          INTEGER DEFAULT 0,
+        triggered_by    TEXT,
+        triggered_at    DATETIME,
+        deactivated_by  TEXT,
+        deactivated_at  DATETIME,
+        channel_snapshot TEXT
+    );
+
 `);
 
 
 // REF-DB-33 — Add theme column to existing installs
 try { db.prepare("ALTER TABLE dashboard_users ADD COLUMN theme TEXT NOT NULL DEFAULT 'light'").run(); } catch {}
+try { db.prepare("ALTER TABLE module_exemptions ADD COLUMN note TEXT").run(); } catch {}
 
 
 // === CONFIG HELPERS ===
@@ -383,6 +396,40 @@ function setAuditConfig(guildId, event, enabled, channelId = null) {
     `).run(guildId, event, enabled ? 1 : 0, channelId);
 }
 
+// === PANIC STATE HELPERS ===
+
+// REF-DB-49
+function getPanicState(guildId) {
+    return db.prepare(
+        'SELECT * FROM panic_state WHERE guild_id = ?'
+    ).get(guildId);
+}
+
+// REF-DB-50
+function setPanicActive(guildId, triggeredBy, channelSnapshot) {
+    db.prepare(`
+        INSERT INTO panic_state (guild_id, active, triggered_by, triggered_at, channel_snapshot)
+        VALUES (?, 1, ?, CURRENT_TIMESTAMP, ?)
+        ON CONFLICT(guild_id) DO UPDATE SET
+            active          = 1,
+            triggered_by    = excluded.triggered_by,
+            triggered_at    = CURRENT_TIMESTAMP,
+            channel_snapshot = excluded.channel_snapshot,
+            deactivated_by  = null,
+            deactivated_at  = null
+    `).run(guildId, triggeredBy, JSON.stringify(channelSnapshot));
+}
+
+// REF-DB-51
+function setPanicInactive(guildId, deactivatedBy) {
+    db.prepare(`
+        UPDATE panic_state SET
+            active         = 0,
+            deactivated_by = ?,
+            deactivated_at = CURRENT_TIMESTAMP
+        WHERE guild_id = ?
+    `).run(deactivatedBy, guildId);
+}
 
 // === GUILD HELPERS ===
 
@@ -405,21 +452,21 @@ function getGuilds() {
 // REF-DB-44
 function getModuleExemptions(guildId, module) {
     const rows = db.prepare(
-        'SELECT * FROM module_exemptions WHERE guild_id = ? AND module = ?'
+        'SELECT * FROM module_exemptions WHERE guild_id = ? AND module = ? ORDER BY added_at DESC'
     ).all(guildId, module);
     return {
-        roles:    rows.filter(r => r.type === 'role').map(r => r.target_id),
-        users:    rows.filter(r => r.type === 'user').map(r => r.target_id),
-        channels: rows.filter(r => r.type === 'channel').map(r => r.target_id),
+        roles:    rows.filter(r => r.type === 'role'),
+        users:    rows.filter(r => r.type === 'user'),
+        channels: rows.filter(r => r.type === 'channel'),
     };
 }
 
 // REF-DB-45
-function addModuleExemption(guildId, module, type, targetId, addedBy) {
+function addModuleExemption(guildId, module, type, targetId, addedBy, note) {
     db.prepare(`
-        INSERT OR IGNORE INTO module_exemptions (guild_id, module, type, target_id, added_by)
-        VALUES (?, ?, ?, ?, ?)
-    `).run(guildId, module, type, targetId, addedBy);
+        INSERT OR IGNORE INTO module_exemptions (guild_id, module, type, target_id, added_by, note)
+        VALUES (?, ?, ?, ?, ?, ?)
+    `).run(guildId, module, type, targetId, addedBy, note || null);
 }
 
 // REF-DB-46
@@ -517,6 +564,9 @@ module.exports = {
     setAuditConfig,
     setGuilds,
     getGuilds,
+    getPanicState,
+    setPanicActive,
+    setPanicInactive,
     getLadder,
     setLadderStep,
     deleteLadderStep,

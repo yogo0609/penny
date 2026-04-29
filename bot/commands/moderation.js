@@ -169,6 +169,12 @@ const commands = [
         .addStringOption(opt =>
             opt.setName('reason').setDescription('Reason').setRequired(false)),
 
+    // === PANIC ===
+    new SlashCommandBuilder()
+        .setName('panic')
+        .setDescription('Toggle Panic Mode — locks or unlocks all channels instantly')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+
     // === TEMPMUTE ===
     new SlashCommandBuilder()
         .setName('tempmute')

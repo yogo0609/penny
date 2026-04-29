@@ -71,11 +71,13 @@ router.get('/config/:guildId', (req, res) => {
         'newline_enabled', 'newline_action', 'newline_max',
         'zalgo_enabled', 'zalgo_action',
         'antihoist_enabled',
-        'antiphishing_enabled',
         'accountage_enabled', 'accountage_min_days',
         'welcome_enabled', 'welcome_channel_id', 'welcome_message',
         'autorole_enabled', 'autorole_id',
         'levels_enabled',
+        'panic_alert_role',
+        'panic_alert_channel',
+        'panic_authorized_roles',
         'audit_channel_id',
         'audit_messages',
         'audit_messages_edit',
@@ -390,8 +392,8 @@ router.get('/module-exemptions/:guildId/:module', (req, res) => {
 
 // REF-RT-34 — Add a module exemption
 router.post('/module-exemptions/:guildId/:module', (req, res) => {
-    const { guildId, module }          = req.params;
-    const { type, target_id, added_by } = req.body;
+    const { guildId, module }               = req.params;
+    const { type, target_id, added_by, note } = req.body;
 
     if (!type || !target_id || !added_by) {
         return res.status(400).json({ error: 'type, target_id and added_by are required' });
@@ -401,7 +403,7 @@ router.post('/module-exemptions/:guildId/:module', (req, res) => {
         return res.status(400).json({ error: 'type must be role, user or channel' });
     }
 
-    db.addModuleExemption(guildId, module, type, target_id, added_by);
+    db.addModuleExemption(guildId, module, type, target_id, added_by, note || null);
     res.json({ success: true });
 });
 
@@ -415,6 +417,33 @@ router.delete('/module-exemptions/:guildId/:module', (req, res) => {
     }
 
     db.removeModuleExemption(guildId, module, type, target_id);
+    res.json({ success: true });
+});
+
+// === PANIC MODE ROUTES ===
+
+// REF-RT-36 — Get panic state for a guild
+router.get('/panic/:guildId', (req, res) => {
+    const { guildId } = req.params;
+    const state = db.getPanicState(guildId);
+    res.json(state || { active: 0 });
+});
+
+// REF-RT-37 — Activate panic mode
+router.post('/panic/:guildId/activate', (req, res) => {
+    const { guildId }                    = req.params;
+    const { triggered_by, channel_snapshot } = req.body;
+    if (!triggered_by) return res.status(400).json({ error: 'triggered_by required' });
+    db.setPanicActive(guildId, triggered_by, channel_snapshot || []);
+    res.json({ success: true });
+});
+
+// REF-RT-38 — Deactivate panic mode
+router.post('/panic/:guildId/deactivate', (req, res) => {
+    const { guildId }       = req.params;
+    const { deactivated_by } = req.body;
+    if (!deactivated_by) return res.status(400).json({ error: 'deactivated_by required' });
+    db.setPanicInactive(guildId, deactivated_by);
     res.json({ success: true });
 });
 

@@ -297,7 +297,6 @@ const SECTIONS = {
     secmention:   { label: 'Mass Mention',       tabs: ['Settings', 'Exemptions'],                  render: renderSecMention   },
     secinvite:    { label: 'Anti-Invite Links',  tabs: ['Settings', 'Exemptions'],                  render: renderSecInvite    },
     secage:       { label: 'Account Age Gate',   tabs: ['Settings', 'Exemptions'],                  render: renderSecAge       },
-    secphishing:  { label: 'Anti-Phishing',      tabs: ['Settings'],                                render: renderComingSoon   },
     secantilink:  { label: 'Anti-Link',          tabs: ['Settings', 'Exemptions'],                  render: renderSecAntiLink  },
     secrepeat:    { label: 'Repeated Text',      tabs: ['Settings', 'Exemptions'],                  render: renderSecRepeat    },
     secemoji:     { label: 'Emoji Spam',         tabs: ['Settings', 'Exemptions'],                  render: renderSecEmoji     },
@@ -305,6 +304,7 @@ const SECTIONS = {
     seczalgo:     { label: 'Zalgo Text',         tabs: ['Settings', 'Exemptions'],                  render: renderSecZalgo     },
     sechoist:     { label: 'Anti-Hoist',         tabs: ['Settings', 'Exemptions'],                  render: renderSecHoist     },
     antinuke:     { label: 'Anti-Nuke',          tabs: ['Settings'],                                render: renderComingSoon   },
+    panicmode:    { label: 'Panic Mode',          tabs: ['Settings'],                                render: renderPanicMode     },
     verification: { label: 'Verification',       tabs: ['Settings'],                                render: renderComingSoon   },
     joingate:     { label: 'Join Gate',          tabs: ['Settings'],                                render: renderComingSoon   },
     modlog:       { label: 'Mod Log',            tabs: ['Mod Log'],                                 render: renderModLog     },
@@ -517,8 +517,19 @@ async function toggleTheme() {
 // REF-APP-65
 async function handlePanicMode() {
     if (!State.guildId) { toast('No server selected', 'error'); return; }
-    if (!confirm('Activate Panic Mode? This will lock down all channels in the server.')) return;
-    toast('Panic mode — coming soon', 'error');
+    try {
+        const state    = await apiGet(`/api/panic/${State.guildId}`);
+        const isActive = state?.active === 1;
+        if (isActive) {
+            if (!confirm('Deactivate Panic Mode? This will restore all channels.')) return;
+            await apiPost(`/api/panic/${State.guildId}/deactivate`, { deactivated_by: State.user?.username });
+            toast('Panic Mode deactivated');
+        } else {
+            if (!confirm('Activate Panic Mode? This will lock ALL channels immediately.')) return;
+            await apiPost(`/api/panic/${State.guildId}/activate`, { triggered_by: State.user?.username, channel_snapshot: [] });
+            toast('Panic Mode activated', 'error');
+        }
+    } catch(e) { toast('Failed', 'error'); }
 }
 
 
@@ -1037,10 +1048,12 @@ function moduleRow(key, name, actionKey, config) {
 // REF-APP-33
 function thrRow(key, label, value, unit) {
     return `
-        <div class="thr-row">
-            <div class="thr-label">${label}</div>
-            <input class="thr-input" type="number" value="${value}" data-key="${key}">
-            <div class="thr-unit">${unit}</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+            <div style="font-size:12px;font-weight:500;color:var(--text)">${label}</div>
+            <div style="display:flex;align-items:center;gap:8px">
+                <input class="thr-input" type="number" value="${value}" data-key="${key}" style="width:90px">
+                <div style="font-size:11px;color:var(--text3)">${unit}</div>
+            </div>
         </div>`;
 }
 
@@ -1555,7 +1568,7 @@ function renderAuditLog(tab) {
             <div class="card">
                 <div class="card-header"><div class="card-title">Audit Channel</div></div>
                 <div class="settings-row">
-                    <div class="settings-label">Default Audit Channel</div>
+                    <div class="settings-label"> </div>
                     <input class="settings-input" id="audit_channel_id" placeholder="Channel ID">
                 </div>
                 <div class="card-footer">
@@ -1897,6 +1910,7 @@ const SECTION_GROUP = {
     seczalgo:     'security',
     sechoist:     'security',
     antinuke:     'security',
+    panicmode:    'security',
     verification: 'security',
     joingate:     'security',
     modlog:       'moderation',
@@ -2206,33 +2220,74 @@ function secActionSelect(key, currentValue) {
         </select>`;
 }
 
-function secModuleCard(title, desc, enabledKey, actionKey, thresholds, extra) {
+function secModuleCard(title, desc, enabledKey, actionKey, thresholds, extra, module) {
     const c = State.config;
+    const thresholdKeys = (thresholds||'').match(/data-key="([^"]+)"/g)?.map(k=>k.replace(/data-key="|"/g,''))||[];
     return `
-        <div class="card">
-            <div class="card-header">
-                <div>
-                    <div class="card-title">${title}</div>
-                    <div class="card-desc">${desc}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+            <div class="card">
+                <div class="toggle-row">
+                    <div class="toggle-info">
+                        <div class="toggle-name">${title}</div>
+                        <div style="font-size:11px;color:var(--text3);margin-top:2px">${desc}</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="${enabledKey}" ${c[enabledKey] ? 'checked' : ''} onchange="saveSecToggle('${enabledKey}', this.checked)">
+                        <span class="slider"></span>
+                    </label>
                 </div>
-                <label class="toggle">
-                    <input type="checkbox" id="${enabledKey}" ${c[enabledKey] ? 'checked' : ''} onchange="saveSecToggle('${enabledKey}', this.checked)">
-                    <span class="slider"></span>
-                </label>
+                ${actionKey ? `
+                <div class="toggle-row">
+                    <div class="toggle-info">
+                        <div class="toggle-name">Action</div>
+                        <div style="font-size:11px;color:var(--text3);margin-top:2px">What Penny does when triggered</div>
+                    </div>
+                    <div class="toggle-right">
+                        ${secActionSelect(actionKey, c[actionKey])}
+                    </div>
+                </div>` : ''}
+                ${thresholds || ''}
+                <div class="card-footer">
+                    <button class="btn-primary" onclick="saveSecModule('${enabledKey}', ${actionKey ? `'${actionKey}'` : 'null'}, ${JSON.stringify(thresholdKeys)})">Save</button>
+                </div>
             </div>
-            ${actionKey ? `
-            <div class="settings-row">
-                <div>
-                    <div class="settings-label">Action</div>
-                    <div style="font-size:12px;color:var(--text3)">What Penny does when this module triggers</div>
+            ${module ? `
+            <div class="card">
+                <div class="toggle-row" style="border-bottom:1px solid var(--border)">
+                    <div class="toggle-info">
+                        <div class="toggle-name">Exemptions</div>
+                        <div style="font-size:11px;color:var(--text3);margin-top:2px">Roles, users and channels exempt from this module only</div>
+                    </div>
                 </div>
-                ${secActionSelect(actionKey, c[actionKey])}
+                <div class="toggle-row">
+                    <div class="toggle-info">
+                        <div class="toggle-name">Type</div>
+                        <div style="font-size:11px;color:var(--text3);margin-top:2px">What you are exempting</div>
+                    </div>
+                    <select class="settings-input" id="me-type-${module}" style="width:180px">
+                        <option value="role">Role</option>
+                        <option value="user">User</option>
+                        <option value="channel">Channel</option>
+                    </select>
+                </div>
+                <div class="toggle-row">
+                    <div class="toggle-info">
+                        <div class="toggle-name">ID</div>
+                        <div style="font-size:11px;color:var(--text3);margin-top:2px">Role, user or channel ID</div>
+                    </div>
+                    <input class="settings-input" id="me-id-${module}" placeholder="e.g. 123456789012345678" style="width:180px">
+                </div>
+                <div class="toggle-row">
+                    <div class="toggle-info">
+                        <div class="toggle-name">Note</div>
+                        <div style="font-size:11px;color:var(--text3);margin-top:2px">Reason for this exemption</div>
+                    </div>
+                    <input class="settings-input" id="me-note-${module}" placeholder="e.g. Staff role" style="width:180px">
+                </div>
+                <div class="card-footer">
+                    <button class="btn-primary" onclick="addModuleExemption('${module}')">Add</button>
+                </div>
             </div>` : ''}
-            ${thresholds || ''}
-            ${extra || ''}
-            <div class="card-footer">
-                <button class="btn-primary" onclick="saveSecModule('${enabledKey}', ${actionKey ? `'${actionKey}'` : 'null'}, ${JSON.stringify((thresholds||'').match(/data-key="([^"]+)"/g)?.map(k=>k.replace(/data-key="|"/g,''))||[])})">Save</button>
-            </div>
         </div>`;
 }
 
@@ -2281,7 +2336,6 @@ function renderSecOverview() {
         { key: 'antilink_enabled',     name: 'Anti-Invite Links', section: 'secinvite',   desc: 'Discord invite link blocking'   },
         { key: 'antilink_all_enabled', name: 'Anti-Link',         section: 'secantilink', desc: 'All URL blocking'               },
         { key: 'accountage_enabled',   name: 'Account Age Gate',  section: 'secage',      desc: 'New account filtering'         },
-        { key: 'antiphishing_enabled', name: 'Anti-Phishing',     section: 'secphishing', desc: 'Phishing link detection'        },
         { key: 'repeat_enabled',       name: 'Repeated Text',     section: 'secrepeat',   desc: 'Copypasta detection'            },
         { key: 'emojispam_enabled',    name: 'Emoji Spam',        section: 'secemoji',    desc: 'Emoji spam detection'           },
         { key: 'newline_enabled',      name: 'Newline Spam',      section: 'secnewline',  desc: 'Line break spam detection'      },
@@ -2334,19 +2388,23 @@ function renderSecSpam(tab) {
         'Detects users sending too many messages in a short window',
         'spam_enabled',
         'spam_action',
-        `<div class="settings-row">
-            <div class="settings-label">Max messages</div>
-            <input class="thr-input" type="number" value="${c.spam_max_messages || 5}" data-key="spam_max_messages">
-            <div class="thr-unit">messages</div>
+        `<div class="toggle-row">
+            <div class="toggle-info">
+                <div class="toggle-name">Max messages</div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">Messages allowed before triggering</div>
+            </div>
+            <input class="settings-input" type="number" value="${c.spam_max_messages || 5}" data-key="spam_max_messages" style="width:90px;text-align:right">
         </div>
-        <div class="settings-row">
-            <div class="settings-label">Time window</div>
-            <input class="thr-input" type="number" value="${c.spam_window_ms || 5000}" data-key="spam_window_ms">
-            <div class="thr-unit">ms</div>
-        </div>`
+        <div class="toggle-row">
+            <div class="toggle-info">
+                <div class="toggle-name">Time window</div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">Rolling window in milliseconds</div>
+            </div>
+            <input class="settings-input" type="number" value="${c.spam_window_ms || 5000}" data-key="spam_window_ms" style="width:90px;text-align:right">
+        </div>`,
+        null, 'spam'
     );
 }
-
 
 // === ANTI-RAID ===
 // REF-APP-72c
@@ -2358,23 +2416,28 @@ function renderSecRaid(tab) {
         'Triggers when too many users join the server in a short window',
         'raid_enabled',
         'raid_action',
-        `<div class="settings-row">
-            <div class="settings-label">Max joins</div>
-            <input class="thr-input" type="number" value="${c.raid_max_joins || 5}" data-key="raid_max_joins">
-            <div class="thr-unit">joins</div>
+        `<div class="toggle-row">
+            <div class="toggle-info">
+                <div class="toggle-name">Max joins</div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">Joins allowed before triggering</div>
+            </div>
+            <input class="settings-input" type="number" value="${c.raid_max_joins || 5}" data-key="raid_max_joins" style="width:90px;text-align:right">
         </div>
-        <div class="settings-row">
-            <div class="settings-label">Time window</div>
-            <input class="thr-input" type="number" value="${c.raid_window_ms || 10000}" data-key="raid_window_ms">
-            <div class="thr-unit">ms</div>
-        </div>`
+        <div class="toggle-row">
+            <div class="toggle-info">
+                <div class="toggle-name">Time window</div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">Rolling window in milliseconds</div>
+            </div>
+            <input class="settings-input" type="number" value="${c.raid_window_ms || 10000}" data-key="raid_window_ms" style="width:90px;text-align:right">
+        </div>`,
+        null, 'raid'
     );
 }
 
 
 // === BAD WORD FILTER ===
 // REF-APP-72d
-    function renderSecBadWords(tab) {
+function renderSecBadWords(tab) {
     if (tab === 'Exemptions') { renderModuleExemptionsTab('badwords'); return; }
     const c = State.config;
 
@@ -2384,7 +2447,8 @@ function renderSecRaid(tab) {
             'Detects and acts on messages containing prohibited words',
             'badwords_enabled',
             'badwords_action',
-            null
+            null,
+            null, 'badwords'
         );
     }
 
@@ -2415,16 +2479,21 @@ function renderSecCaps(tab) {
         'Detects messages with excessive capital letters',
         'caps_enabled',
         'caps_action',
-        `<div class="settings-row">
-            <div class="settings-label">Caps threshold</div>
-            <input class="thr-input" type="number" value="${c.caps_threshold || 0.7}" data-key="caps_threshold" step="0.1" min="0.1" max="1">
-            <div class="thr-unit">ratio (0.7 = 70%)</div>
+        `<div class="toggle-row">
+            <div class="toggle-info">
+                <div class="toggle-name">Caps threshold</div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">Ratio of caps to trigger (0.7 = 70%)</div>
+            </div>
+            <input class="settings-input" type="number" value="${c.caps_threshold || 0.7}" data-key="caps_threshold" step="0.1" min="0.1" max="1" style="width:90px;text-align:right">
         </div>
-        <div class="settings-row">
-            <div class="settings-label">Minimum length</div>
-            <input class="thr-input" type="number" value="${c.caps_min_length || 10}" data-key="caps_min_length">
-            <div class="thr-unit">chars</div>
-        </div>`
+        <div class="toggle-row">
+            <div class="toggle-info">
+                <div class="toggle-name">Minimum length</div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">Minimum characters before checking</div>
+            </div>
+            <input class="settings-input" type="number" value="${c.caps_min_length || 10}" data-key="caps_min_length" style="width:90px;text-align:right">
+        </div>`,
+        null, 'caps'
     );
 }
 
@@ -2439,11 +2508,14 @@ function renderSecMention(tab) {
         'Detects messages that mention too many users or roles at once',
         'mass_mention_enabled',
         'mass_mention_action',
-        `<div class="settings-row">
-            <div class="settings-label">Max mentions</div>
-            <input class="thr-input" type="number" value="${c.mass_mention_max || 5}" data-key="mass_mention_max">
-            <div class="thr-unit">mentions</div>
-        </div>`
+        `<div class="toggle-row">
+            <div class="toggle-info">
+                <div class="toggle-name">Max mentions</div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">Mentions allowed before triggering</div>
+            </div>
+            <input class="settings-input" type="number" value="${c.mass_mention_max || 5}" data-key="mass_mention_max" style="width:90px;text-align:right">
+        </div>`,
+        null, 'mass_mention'
     );
 }
 
@@ -2457,7 +2529,8 @@ function renderSecInvite(tab) {
         'Detects and acts on Discord invite links posted in the server',
         'antilink_enabled',
         'antilink_action',
-        null
+        null,
+        null, 'antilink'
     );
 }
 
@@ -2472,11 +2545,14 @@ function renderSecAge(tab) {
         'Kicks new members whose Discord account is too new',
         'accountage_enabled',
         null,
-        `<div class="settings-row">
-            <div class="settings-label">Minimum account age</div>
-            <input class="thr-input" type="number" value="${c.accountage_min_days || 7}" data-key="accountage_min_days">
-            <div class="thr-unit">days</div>
-        </div>`
+        `<div class="toggle-row">
+            <div class="toggle-info">
+                <div class="toggle-name">Minimum account age</div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">Accounts newer than this are kicked</div>
+            </div>
+            <input class="settings-input" type="number" value="${c.accountage_min_days || 7}" data-key="accountage_min_days" style="width:90px;text-align:right">
+        </div>`,
+        null, 'accountage'
     );
 }
 
@@ -2514,20 +2590,28 @@ async function loadModuleExemptions(module) {
     try {
         const data = await apiGet(`/api/module-exemptions/${State.guildId}/${module}`);
         const el   = document.getElementById(`me-list-${module}`);
-        const all  = [
-            ...data.roles.map(id    => ({ id, type: 'role',    label: `Role: ${id}`    })),
-            ...data.users.map(id    => ({ id, type: 'user',    label: `User: ${id}`    })),
-            ...data.channels.map(id => ({ id, type: 'channel', label: `Channel: ${id}` })),
+        if (!el) return;
+
+        const all = [
+            ...data.roles.map(r    => ({ ...r, type: 'Role'    })),
+            ...data.users.map(u    => ({ ...u, type: 'User'    })),
+            ...data.channels.map(c => ({ ...c, type: 'Channel' })),
         ];
+
         if (!all.length) {
-            el.innerHTML = `<div class="empty-state" style="padding:16px"><div class="empty-state-title">No exemptions added</div></div>`;
+            el.innerHTML = `<tr><td colspan="6" class="table-loading">No exemptions added</td></tr>`;
             return;
         }
+
         el.innerHTML = all.map(e => `
-            <div class="exempt-item">
-                <span class="exempt-name">${e.label}</span>
-                <button class="exempt-remove" onclick="removeModuleExemption('${module}','${e.type}','${e.id}')">Remove</button>
-            </div>`).join('');
+            <tr>
+                <td>${e.type}</td>
+                <td style="font-family:monospace;font-size:12px">${e.target_id}</td>
+                <td>${e.note || '—'}</td>
+                <td>${e.added_by || '—'}</td>
+                <td>${e.added_at ? new Date(e.added_at).toLocaleString() : '—'}</td>
+                <td><button class="exempt-remove" onclick="removeModuleExemption('${module}','${e.type.toLowerCase()}','${e.target_id}')">Remove</button></td>
+            </tr>`).join('');
     } catch(e) { console.error(e); }
 }
 
@@ -2535,12 +2619,16 @@ async function addModuleExemption(module) {
     if (!State.guildId) { toast('No server selected', 'error'); return; }
     const type      = document.getElementById(`me-type-${module}`).value;
     const target_id = document.getElementById(`me-id-${module}`).value.trim();
+    const note      = document.getElementById(`me-note-${module}`)?.value.trim() || null;
     if (!target_id) { toast('Enter an ID', 'error'); return; }
     try {
         await apiPost(`/api/module-exemptions/${State.guildId}/${module}`, {
-            type, target_id, added_by: State.user?.username
+            type, target_id, added_by: State.user?.username, note
         });
         document.getElementById(`me-id-${module}`).value = '';
+        if (document.getElementById(`me-note-${module}`)) {
+            document.getElementById(`me-note-${module}`).value = '';
+        }
         toast('Exemption added');
         loadModuleExemptions(module);
     } catch(e) { toast('Failed', 'error'); }
@@ -2566,9 +2654,11 @@ function renderSecAntiLink(tab) {
         'Blocks all URLs posted in the server (not just Discord invites)',
         'antilink_all_enabled',
         'antilink_all_action',
-        null
+        null,
+        null, 'antilink_all'
     );
 }
+
 
 // === REPEATED TEXT ===
 // REF-APP-72j
@@ -2580,18 +2670,24 @@ function renderSecRepeat(tab) {
         'Detects copypasta and messages with excessive repeated words',
         'repeat_enabled',
         'repeat_action',
-        `<div class="settings-row">
-            <div class="settings-label">Minimum length</div>
-            <input class="thr-input" type="number" value="${c.repeat_min_length || 20}" data-key="repeat_min_length">
-            <div class="thr-unit">chars</div>
+        `<div class="toggle-row">
+            <div class="toggle-info">
+                <div class="toggle-name">Minimum length</div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">Minimum characters before checking</div>
+            </div>
+            <input class="settings-input" type="number" value="${c.repeat_min_length || 20}" data-key="repeat_min_length" style="width:90px;text-align:right">
         </div>
-        <div class="settings-row">
-            <div class="settings-label">Repeat threshold</div>
-            <input class="thr-input" type="number" value="${c.repeat_threshold || 0.7}" data-key="repeat_threshold" step="0.1" min="0.1" max="1">
-            <div class="thr-unit">ratio</div>
-        </div>`
+        <div class="toggle-row">
+            <div class="toggle-info">
+                <div class="toggle-name">Repeat threshold</div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">Ratio of repeated words to trigger (0.7 = 70%)</div>
+            </div>
+            <input class="settings-input" type="number" value="${c.repeat_threshold || 0.7}" data-key="repeat_threshold" step="0.1" min="0.1" max="1" style="width:90px;text-align:right">
+        </div>`,
+        null, 'repeat'
     );
 }
+
 
 // === EMOJI SPAM ===
 // REF-APP-72k
@@ -2603,13 +2699,17 @@ function renderSecEmoji(tab) {
         'Detects messages containing too many emojis',
         'emojispam_enabled',
         'emojispam_action',
-        `<div class="settings-row">
-            <div class="settings-label">Max emojis</div>
-            <input class="thr-input" type="number" value="${c.emojispam_max || 5}" data-key="emojispam_max">
-            <div class="thr-unit">emojis</div>
-        </div>`
+        `<div class="toggle-row">
+            <div class="toggle-info">
+                <div class="toggle-name">Max emojis</div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">Emojis allowed before triggering</div>
+            </div>
+            <input class="settings-input" type="number" value="${c.emojispam_max || 5}" data-key="emojispam_max" style="width:90px;text-align:right">
+        </div>`,
+        null, 'emojispam'
     );
 }
+
 
 // === NEWLINE SPAM ===
 // REF-APP-72l
@@ -2621,13 +2721,17 @@ function renderSecNewline(tab) {
         'Detects messages with excessive line breaks',
         'newline_enabled',
         'newline_action',
-        `<div class="settings-row">
-            <div class="settings-label">Max lines</div>
-            <input class="thr-input" type="number" value="${c.newline_max || 10}" data-key="newline_max">
-            <div class="thr-unit">lines</div>
-        </div>`
+        `<div class="toggle-row">
+            <div class="toggle-info">
+                <div class="toggle-name">Max lines</div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">Line breaks allowed before triggering</div>
+            </div>
+            <input class="settings-input" type="number" value="${c.newline_max || 10}" data-key="newline_max" style="width:90px;text-align:right">
+        </div>`,
+        null, 'newline'
     );
 }
+
 
 // === ZALGO TEXT ===
 // REF-APP-72m
@@ -2638,9 +2742,11 @@ function renderSecZalgo(tab) {
         'Detects and removes corrupted or glitched looking text',
         'zalgo_enabled',
         'zalgo_action',
-        null
+        null,
+        null, 'zalgo'
     );
 }
+
 
 // === ANTI-HOIST ===
 // REF-APP-72n
@@ -2651,7 +2757,8 @@ function renderSecHoist(tab) {
         'Renames users whose names start with special characters to prevent them appearing at the top of the member list',
         'antihoist_enabled',
         null,
-        null
+        null,
+        null, 'antihoist'
     );
 }
 
@@ -2659,33 +2766,156 @@ function renderSecHoist(tab) {
 function renderModuleExemptionsTab(module) {
     const el = document.getElementById('content');
     el.innerHTML = `
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-            <div class="card">
-                <div class="card-header"><div class="card-title">Add Exemption</div></div>
-                <div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px">
-                    <div class="settings-row" style="border:none;padding:0">
-                        <div class="settings-label">Type</div>
-                        <select class="settings-input" id="me-type-${module}" style="width:140px">
-                            <option value="role">Role</option>
-                            <option value="user">User</option>
-                            <option value="channel">Channel</option>
-                        </select>
-                    </div>
-                    <div class="settings-row" style="border:none;padding:0">
-                        <div class="settings-label">ID</div>
-                        <input class="settings-input" id="me-id-${module}" placeholder="Enter role, user or channel ID">
-                    </div>
-                </div>
-                <div class="card-footer">
-                    <button class="btn-primary" onclick="addModuleExemption('${module}')">Add Exemption</button>
-                </div>
-            </div>
-            <div class="card">
-                <div class="card-header"><div class="card-title">Current Exemptions</div></div>
-                <div id="me-list-${module}">
-                    <div class="empty-state"><div class="empty-state-title">Loading...</div></div>
-                </div>
-            </div>
+        <div class="card">
+            <div class="card-header"><div class="card-title">Exemptions</div></div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>ID</th>
+                        <th>Note</th>
+                        <th>Added By</th>
+                        <th>Date Added</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="me-list-${module}">
+                    <tr><td colspan="6" class="table-loading">Loading...</td></tr>
+                </tbody>
+            </table>
         </div>`;
     loadModuleExemptions(module);
+}
+
+// === PANIC MODE ===
+// REF-APP-74
+async function renderPanicMode() {
+    const el = document.getElementById('content');
+    const c  = State.config;
+
+    // Get current panic state
+    let panicState = { active: 0 };
+    if (State.guildId) {
+        try {
+            panicState = await apiGet(`/api/panic/${State.guildId}`);
+        } catch {}
+    }
+
+    const isActive = panicState?.active === 1;
+
+    el.innerHTML = `
+        <div class="card" style="${isActive ? 'border-color:var(--red)' : ''}">
+            <div class="card-header" style="${isActive ? 'background:var(--red-bg)' : ''}">
+                <div>
+                    <div class="card-title" style="${isActive ? 'color:var(--red)' : ''}">
+                        ${isActive ? '🚨 PANIC MODE ACTIVE' : 'Panic Mode'}
+                    </div>
+                    <div class="card-desc">
+                        ${isActive
+                            ? `Activated by ${panicState.triggered_by} at ${new Date(panicState.triggered_at).toLocaleString()}`
+                            : 'Instantly locks all channels and kicks new members joining during the emergency'}
+                    </div>
+                </div>
+                <button class="btn-danger" onclick="togglePanicMode(${isActive})"
+                    style="background:${isActive ? 'var(--green)' : 'var(--red)'};border-color:${isActive ? 'var(--green)' : 'var(--red)'};color:#fff;min-width:180px">
+                    ${isActive ? '✅ Deactivate Panic Mode' : '🚨 Activate Panic Mode'}
+                </button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><div class="card-title">Configuration</div></div>
+            <div class="toggle-row">
+                <div class="toggle-info">
+                    <div class="toggle-name">Alert Role</div>
+                    <div style="font-size:11px;color:var(--text3);margin-top:2px">Role to ping when panic mode triggers</div>
+                </div>
+                <input class="settings-input" id="panic_alert_role" value="${c.panic_alert_role || ''}" placeholder="Role ID" style="width:200px">
+            </div>
+            <div class="toggle-row">
+                <div class="toggle-info">
+                    <div class="toggle-name">Alert Channel</div>
+                    <div style="font-size:11px;color:var(--text3);margin-top:2px">Channel to post panic alerts (defaults to log channel)</div>
+                </div>
+                <input class="settings-input" id="panic_alert_channel" value="${c.panic_alert_channel || ''}" placeholder="Channel ID" style="width:200px">
+            </div>
+            <div class="toggle-row">
+                <div class="toggle-info">
+                    <div class="toggle-name">Authorized Roles</div>
+                    <div style="font-size:11px;color:var(--text3);margin-top:2px">Roles that can use /panic command (admins always can)</div>
+                </div>
+                <input class="settings-input" id="panic_authorized_roles_input" placeholder="Role ID" style="width:200px">
+            </div>
+            <div style="padding:8px 18px 14px">
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px" id="panic-roles-list">
+                    ${(c.panic_authorized_roles || []).map(id => `
+                        <div class="word-tag">
+                            ${id}
+                            <button class="word-remove" onclick="removePanicRole('${id}')">×</button>
+                        </div>`).join('') || '<span style="font-size:12px;color:var(--text3)">No roles added</span>'}
+                </div>
+                <button class="btn-secondary" style="font-size:12px" onclick="addPanicRole()">Add Role</button>
+            </div>
+            <div class="card-footer">
+                <button class="btn-primary" onclick="savePanicConfig()">Save</button>
+            </div>
+        </div>`;
+}
+
+async function togglePanicMode(isActive) {
+    if (!State.guildId) { toast('No server selected', 'error'); return; }
+
+    if (!isActive) {
+        if (!confirm('Activate Panic Mode? This will lock ALL channels immediately.')) return;
+    }
+
+    try {
+        if (isActive) {
+            await apiPost(`/api/panic/${State.guildId}/deactivate`, {
+                deactivated_by: State.user?.username
+            });
+            toast('Panic Mode deactivated');
+        } else {
+            await apiPost(`/api/panic/${State.guildId}/activate`, {
+                triggered_by: State.user?.username,
+                channel_snapshot: []
+            });
+            toast('Panic Mode activated', 'error');
+        }
+        renderPanicMode();
+    } catch(e) { toast('Failed', 'error'); }
+}
+
+async function savePanicConfig() {
+    if (!State.guildId) { toast('No server selected', 'error'); return; }
+    const updates = {
+        panic_alert_role:    document.getElementById('panic_alert_role').value.trim() || null,
+        panic_alert_channel: document.getElementById('panic_alert_channel').value.trim() || null,
+    };
+    try {
+        await apiPut(`/api/config/${State.guildId}`, updates);
+        Object.assign(State.config, updates);
+        toast('Saved');
+    } catch(e) { toast('Failed', 'error'); }
+}
+
+function addPanicRole() {
+    const input = document.getElementById('panic_authorized_roles_input');
+    const id    = input.value.trim();
+    if (!id) { toast('Enter a role ID', 'error'); return; }
+    const roles = [...(State.config.panic_authorized_roles || [])];
+    if (roles.includes(id)) { toast('Already added', 'error'); return; }
+    roles.push(id);
+    State.config.panic_authorized_roles = roles;
+    apiPatch(`/api/config/${State.guildId}`, { key: 'panic_authorized_roles', value: roles })
+        .then(() => { input.value = ''; renderPanicMode(); toast('Role added'); })
+        .catch(() => toast('Failed', 'error'));
+}
+
+function removePanicRole(id) {
+    const roles = (State.config.panic_authorized_roles || []).filter(r => r !== id);
+    State.config.panic_authorized_roles = roles;
+    apiPatch(`/api/config/${State.guildId}`, { key: 'panic_authorized_roles', value: roles })
+        .then(() => { renderPanicMode(); toast('Role removed'); })
+        .catch(() => toast('Failed', 'error'));
 }
