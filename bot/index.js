@@ -1,4 +1,4 @@
-// === DEPENDENCIES ===
+k// === DEPENDENCIES ===
 require('dotenv').config();
 const { Client, GatewayIntentBits, Partials, EmbedBuilder, PermissionsBitField, AuditLogEvent } = require('discord.js');
 const axios = require('axios');
@@ -567,7 +567,7 @@ client.on('messageCreate', async (message) => {
             );
 
             if (!config.test_mode) {
-                await handleModuleAction(config.badwords_action, message, member, `Prohibited word: ${found}`, config);
+                await handleModuleAction(config.spam_action, message, member, 'Spam detected', config);
             }
 
             spamTracker.set(userId, []);
@@ -590,12 +590,7 @@ client.on('messageCreate', async (message) => {
             );
 
             if (!config.test_mode) {
-                if (config.spam_action === 'delete' || config.spam_action === 'delete_warn' || config.spam_action === 'ladder' || !config.spam_action) {
-                    const msgs     = await message.channel.messages.fetch({ limit: 20 });
-                    const toDelete = msgs.filter(m => m.author.id === message.author.id);
-                    await message.channel.bulkDelete(toDelete).catch(() => {});
-                }
-                await handleModuleAction(config.spam_action, message, member, 'Spam detected', config);
+                await handleModuleAction(config.badwords_action, message, member, `Prohibited word: ${found}`, config);
             }
 
             return;
