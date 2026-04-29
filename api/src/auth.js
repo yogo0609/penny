@@ -43,7 +43,6 @@ function requireOwner(req, res, next) {
 
 // === SETUP CHECK ===
 // REF-AUTH-04
-// Returns whether a Platform Owner exists yet
 router.get('/setup/status', (req, res) => {
     res.json({ setupRequired: !db.hasOwner() });
 });
@@ -51,7 +50,6 @@ router.get('/setup/status', (req, res) => {
 
 // === INITIAL SETUP ===
 // REF-AUTH-05
-// Creates the first Platform Owner — only works if no owner exists yet
 router.post('/setup', async (req, res) => {
     if (db.hasOwner()) {
         return res.status(403).json({ error: 'Setup already complete' });
@@ -113,6 +111,7 @@ router.post('/login', async (req, res) => {
             username:   user.username,
             role:       user.role,
             discord_id: user.discord_id,
+            theme:      user.theme || 'light',
         }
     });
 });
@@ -128,8 +127,21 @@ router.get('/me', verifyToken, (req, res) => {
         username:   user.username,
         role:       user.role,
         discord_id: user.discord_id,
+        theme:      user.theme || 'light',
         last_login: user.last_login,
     });
+});
+
+
+// === UPDATE OWN THEME ===
+// REF-AUTH-12
+router.patch('/me/theme', verifyToken, (req, res) => {
+    const { theme } = req.body;
+    if (!['light', 'dark'].includes(theme)) {
+        return res.status(400).json({ error: 'Theme must be light or dark' });
+    }
+    db.updateUserTheme(req.user.id, theme);
+    res.json({ success: true, theme });
 });
 
 
@@ -198,6 +210,70 @@ router.delete('/users/:id', verifyToken, requireOwner, (req, res) => {
     res.json({ success: true });
 });
 
+// === UPDATE OWN PROFILE ===
+// REF-AUTH-12
+router.patch('/me', verifyToken, async (req, res) => {
+    const { username, password, discord_id } = req.body;
+    const userId = req.user.id;
+
+    try {
+        if (username) {
+            const existing = db.getUserByUsername(username);
+            if (existing && existing.id !== userId) {
+                return res.status(409).json({ error: 'Username already taken' });
+            }
+            db.db.prepare('UPDATE dashboard_users SET username = ? WHERE id = ?').run(username, userId);
+        }
+        if (password) {
+            if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+            const hashed = await bcrypt.hash(password, SALT_ROUNDS);
+            db.db.prepare('UPDATE dashboard_users SET password = ? WHERE id = ?').run(hashed, userId);
+        }
+        if (discord_id !== undefined) {
+            db.db.prepare('UPDATE dashboard_users SET discord_id = ? WHERE id = ?').run(discord_id || null, userId);
+        }
+        const updated = db.getUserById(userId);
+        res.json({ success: true, user: {
+            id:         updated.id,
+            username:   updated.username,
+            role:       updated.role,
+            discord_id: updated.discord_id,
+            theme:      updated.theme || 'light',
+        }});
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to update profile' });
+    }
+});
+
+
+// === UPDATE ANY USER (owner only) ===
+// REF-AUTH-13
+router.patch('/users/:id', verifyToken, requireOwner, async (req, res) => {
+    const { id } = req.params;
+    const { username, password, discord_id } = req.body;
+    const userId = parseInt(id);
+
+    try {
+        if (username) {
+            const existing = db.getUserByUsername(username);
+            if (existing && existing.id !== userId) {
+                return res.status(409).json({ error: 'Username already taken' });
+            }
+            db.db.prepare('UPDATE dashboard_users SET username = ? WHERE id = ?').run(username, userId);
+        }
+        if (password) {
+            if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+            const hashed = await bcrypt.hash(password, SALT_ROUNDS);
+            db.db.prepare('UPDATE dashboard_users SET password = ? WHERE id = ?').run(hashed, userId);
+        }
+        if (discord_id !== undefined) {
+            db.db.prepare('UPDATE dashboard_users SET discord_id = ? WHERE id = ?').run(discord_id || null, userId);
+        }
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to update user' });
+    }
+});
 
 // === EXPORTS ===
 module.exports = { router, verifyToken, requireOwner };

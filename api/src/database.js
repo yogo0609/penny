@@ -66,6 +66,7 @@ db.exec(`
         password     TEXT NOT NULL,
         role         TEXT NOT NULL DEFAULT 'admin',
         discord_id   TEXT,
+        theme        TEXT NOT NULL DEFAULT 'light',
         created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
         last_login   DATETIME
     );
@@ -94,7 +95,7 @@ db.exec(`
         active       INTEGER DEFAULT 1
     );
 
--- REF-DB-28
+    -- REF-DB-28
     CREATE TABLE IF NOT EXISTS audit_log (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         guild_id    TEXT NOT NULL,
@@ -116,7 +117,51 @@ db.exec(`
         PRIMARY KEY (guild_id, event)
     );
 
+    -- REF-DB-38
+    CREATE TABLE IF NOT EXISTS module_exemptions (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id    TEXT NOT NULL,
+        module      TEXT NOT NULL,
+        type        TEXT NOT NULL,
+        target_id   TEXT NOT NULL,
+        added_by    TEXT NOT NULL,
+        added_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(guild_id, module, type, target_id)
+    );
+
+    -- REF-DB-36
+    CREATE TABLE IF NOT EXISTS punishment_ladder (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id      TEXT NOT NULL,
+        step          INTEGER NOT NULL,
+        action        TEXT NOT NULL DEFAULT 'dm',
+        duration      INTEGER,
+        duration_unit TEXT,
+        custom_dm     TEXT,
+        reset_after   INTEGER DEFAULT 0,
+        UNIQUE(guild_id, step)
+    );
+
+    -- REF-DB-37
+    CREATE TABLE IF NOT EXISTS punishment_settings (
+        guild_id      TEXT PRIMARY KEY,
+        reset_on_kick INTEGER DEFAULT 1,
+        reset_on_ban  INTEGER DEFAULT 1,
+        per_module    INTEGER DEFAULT 0
+    );
+
+    -- REF-DB-32
+    CREATE TABLE IF NOT EXISTS guilds (
+        id    TEXT PRIMARY KEY,
+        name  TEXT NOT NULL,
+        icon  TEXT
+    );
+
 `);
+
+
+// REF-DB-33 — Add theme column to existing installs
+try { db.prepare("ALTER TABLE dashboard_users ADD COLUMN theme TEXT NOT NULL DEFAULT 'light'").run(); } catch {}
 
 
 // === CONFIG HELPERS ===
@@ -235,7 +280,7 @@ function getUserById(id) {
 // REF-DB-20
 function getAllUsers() {
     return db.prepare(
-        'SELECT id, username, role, discord_id, created_at, last_login FROM dashboard_users ORDER BY created_at ASC'
+        'SELECT id, username, role, discord_id, theme, created_at, last_login FROM dashboard_users ORDER BY created_at ASC'
     ).all();
 }
 
@@ -258,6 +303,11 @@ function updateLastLogin(id) {
     db.prepare(
         'UPDATE dashboard_users SET last_login = CURRENT_TIMESTAMP WHERE id = ?'
     ).run(id);
+}
+
+// REF-DB-34
+function updateUserTheme(id, theme) {
+    db.prepare('UPDATE dashboard_users SET theme = ? WHERE id = ?').run(theme, id);
 }
 
 
@@ -293,6 +343,7 @@ function getBanHistory(guildId, userId) {
         'SELECT * FROM bans WHERE guild_id = ? AND user_id = ? ORDER BY banned_at DESC'
     ).all(guildId, userId);
 }
+
 
 // === AUDIT LOG HELPERS ===
 
@@ -332,6 +383,109 @@ function setAuditConfig(guildId, event, enabled, channelId = null) {
     `).run(guildId, event, enabled ? 1 : 0, channelId);
 }
 
+
+// === GUILD HELPERS ===
+
+// REF-DB-35
+function setGuilds(guilds) {
+    const upsert = db.prepare(`
+        INSERT INTO guilds (id, name, icon) VALUES (?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET name = excluded.name, icon = excluded.icon
+    `);
+    const tx = db.transaction((gs) => { for (const g of gs) upsert.run(g.id, g.name, g.icon || null); });
+    tx(guilds);
+}
+
+function getGuilds() {
+    return db.prepare('SELECT * FROM guilds ORDER BY name ASC').all();
+}
+
+// === MODULE EXEMPTION HELPERS ===
+
+// REF-DB-44
+function getModuleExemptions(guildId, module) {
+    const rows = db.prepare(
+        'SELECT * FROM module_exemptions WHERE guild_id = ? AND module = ?'
+    ).all(guildId, module);
+    return {
+        roles:    rows.filter(r => r.type === 'role').map(r => r.target_id),
+        users:    rows.filter(r => r.type === 'user').map(r => r.target_id),
+        channels: rows.filter(r => r.type === 'channel').map(r => r.target_id),
+    };
+}
+
+// REF-DB-45
+function addModuleExemption(guildId, module, type, targetId, addedBy) {
+    db.prepare(`
+        INSERT OR IGNORE INTO module_exemptions (guild_id, module, type, target_id, added_by)
+        VALUES (?, ?, ?, ?, ?)
+    `).run(guildId, module, type, targetId, addedBy);
+}
+
+// REF-DB-46
+function removeModuleExemption(guildId, module, type, targetId) {
+    db.prepare(
+        'DELETE FROM module_exemptions WHERE guild_id = ? AND module = ? AND type = ? AND target_id = ?'
+    ).run(guildId, module, type, targetId);
+}
+
+// === PUNISHMENT LADDER HELPERS ===
+
+// REF-DB-38
+function getLadder(guildId) {
+    return db.prepare(
+        'SELECT * FROM punishment_ladder WHERE guild_id = ? ORDER BY step ASC'
+    ).all(guildId);
+}
+
+// REF-DB-39
+function setLadderStep(guildId, step, action, duration, durationUnit, customDm, resetAfter) {
+    db.prepare(`
+        INSERT INTO punishment_ladder (guild_id, step, action, duration, duration_unit, custom_dm, reset_after)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(guild_id, step) DO UPDATE SET
+            action        = excluded.action,
+            duration      = excluded.duration,
+            duration_unit = excluded.duration_unit,
+            custom_dm     = excluded.custom_dm,
+            reset_after   = excluded.reset_after
+    `).run(guildId, step, action, duration || null, durationUnit || null, customDm || null, resetAfter ? 1 : 0);
+}
+
+// REF-DB-40
+function deleteLadderStep(guildId, step) {
+    db.prepare(
+        'DELETE FROM punishment_ladder WHERE guild_id = ? AND step = ?'
+    ).run(guildId, step);
+}
+
+// REF-DB-41
+function clearLadder(guildId) {
+    db.prepare(
+        'DELETE FROM punishment_ladder WHERE guild_id = ?'
+    ).run(guildId);
+}
+
+// REF-DB-42
+function getPunishmentSettings(guildId) {
+    return db.prepare(
+        'SELECT * FROM punishment_settings WHERE guild_id = ?'
+    ).get(guildId);
+}
+
+// REF-DB-43
+function setPunishmentSettings(guildId, resetOnKick, resetOnBan, perModule) {
+    db.prepare(`
+        INSERT INTO punishment_settings (guild_id, reset_on_kick, reset_on_ban, per_module)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(guild_id) DO UPDATE SET
+            reset_on_kick = excluded.reset_on_kick,
+            reset_on_ban  = excluded.reset_on_ban,
+            per_module    = excluded.per_module
+    `).run(guildId, resetOnKick ? 1 : 0, resetOnBan ? 1 : 0, perModule ? 1 : 0);
+}
+
+
 // === EXPORTS ===
 module.exports = {
     db,
@@ -350,6 +504,7 @@ module.exports = {
     getUserById,
     getAllUsers,
     updateUserRole,
+    updateUserTheme,
     deleteUser,
     updateLastLogin,
     addBan,
@@ -360,4 +515,15 @@ module.exports = {
     getAuditLogs,
     getAuditConfig,
     setAuditConfig,
+    setGuilds,
+    getGuilds,
+    getLadder,
+    setLadderStep,
+    deleteLadderStep,
+    clearLadder,
+    getPunishmentSettings,
+    setPunishmentSettings,
+    getModuleExemptions,
+    addModuleExemption,
+    removeModuleExemption,
 };

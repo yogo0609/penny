@@ -3,12 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Welcome to Penny</title>
+    <title>Penny</title>
     <link rel="stylesheet" href="css/style.css">
-    <script>
-        // REF-DASH-01 — API endpoint, no secrets in frontend
-        window.PENNY_API_URL = 'http://100.120.249.6:4000';
-    </script>
+    <!-- REF-DASH-01 — API URL loaded dynamically from server -->
+    <script src="http://100.120.249.6:4000/client-config.js"></script>
 </head>
 <body>
 
@@ -35,7 +33,7 @@
         </div>
     </div>
 
-    <!-- REF-DASH-03 — First Run Setup Screen -->
+    <!-- REF-DASH-03 — First Run Setup -->
     <div id="setup-screen" class="login-screen hidden">
         <div class="login-card">
             <div class="login-brand">
@@ -76,82 +74,169 @@
                 </div>
             </div>
 
+            <div class="sb-server">
+                <div class="sb-server-icon" id="sb-server-icon">?</div>
+                <select class="sb-server-select" id="guild-select" onchange="selectGuild(this.value)">
+                    <option value="">Select server</option>
+                </select>
+            </div>
+
             <nav class="nav">
-                <div class="nav-label">Main</div>
-                <button class="nav-item" data-section="overview">
-                    <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h5v5H2V2zm0 7h5v5H2V9zm7-7h5v5H9V2zm0 7h5v5H9V9z"/></svg>
-                    Overview
-                </button>
-                <button class="nav-item" data-section="protection">
-                    <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1L2 3.5v4C2 11 5 13.5 8 15c3-1.5 6-4 6-7.5v-4L8 1z"/></svg>
-                    Protection
-                </button>
-                <button class="nav-item" data-section="exemptions">
-                    <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 8a3 3 0 100-6 3 3 0 000 6zm-5 6a5 5 0 0110 0H3z"/></svg>
-                    Exemptions
-                </button>
 
-                <div class="nav-label">Moderation</div>
-                <button class="nav-item" data-section="moderation">
-                    <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v9a1.5 1.5 0 01-1.5 1.5H9l-1 2-1-2H2.5A1.5 1.5 0 011 11.5v-9z"/></svg>
-                    Mod Log
-                </button>
-                
-                <button class="nav-item" data-section="auditlog">
-                    <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M2 1.75A.75.75 0 012.75 1h7.586a.75.75 0 01.53.22l2.414 2.414a.75.75 0 01.22.53V14.25a.75.75 0 01-.75.75H2.75a.75.75 0 01-.75-.75V1.75zM4 6h8v1H4V6zm0 2h8v1H4V8zm0 2h5v1H4v-1z"/></svg>
-                    Audit Log
-                </button>
+                <!-- Dashboard — top level, no group -->
+                <button class="nav-item nav-top" data-section="overview">DASHBOARD</button>
 
-                <div class="nav-label">Configuration</div>
-                <button class="nav-item" data-section="welcome">
-                    <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 15A7 7 0 108 1a7 7 0 000 14zm1-10H7v2H5v2h2v2h2v-2h2V7H9V5z"/></svg>
-                    Welcome & Roles
-                </button>
-                <button class="nav-item owner-only" data-section="users">
-                    <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1H7zm4-6a3 3 0 100-6 3 3 0 000 6zM5.216 14A2.238 2.238 0 015 13c0-1.355.68-2.75 1.936-3.72A6.325 6.325 0 005 9c-4 0-5 3-5 4s1 1 1 1h4.216z"/></svg>
-                    Users
-                </button>
-                <button class="nav-item" data-section="settings">
-                    <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M7.5 1a.5.5 0 01.5.5v1.05a5.002 5.002 0 013.16 1.59l.91-.527.5.866-.91.527a5 5 0 010 3.984l.91.527-.5.866-.91-.527A5.002 5.002 0 018.5 11.45V12.5a.5.5 0 01-1 0v-1.05a5.002 5.002 0 01-3.16-1.59l-.91.527-.5-.866.91-.527a5 5 0 010-3.984l-.91-.527.5-.866.91.527A5.002 5.002 0 016.5 2.55V1.5a.5.5 0 01.5-.5zM8 5a3 3 0 100 6A3 3 0 008 5z"/></svg>
-                    Settings
-                </button>
+                <!-- Security -->
+                <div class="nav-group" id="group-security">
+                    <button class="nav-group-header" onclick="toggleGroup('security')">
+                        <span>SECURITY</span>
+                        <span class="nav-chevron" id="chevron-security">▸</span>
+                    </button>
+                    <div class="nav-group-children" id="children-security">
+                        <button class="nav-item" data-section="secoverview">Overview</button>
+                        <button class="nav-item" data-section="secspam">Spam Detection</button>
+                        <button class="nav-item" data-section="secraid">Anti-Raid</button>
+                        <button class="nav-item" data-section="secbadwords">Bad Word Filter</button>
+                        <button class="nav-item" data-section="seccaps">Caps Filter</button>
+                        <button class="nav-item" data-section="secmention">Mass Mention</button>
+                        <button class="nav-item" data-section="secinvite">Anti-Invite Links</button>
+                        <button class="nav-item" data-section="secage">Account Age Gate</button>
+                        <button class="nav-item" data-section="secphishing">Anti-Phishing</button>
+                        <button class="nav-item" data-section="secantilink">Anti-Link</button>
+                        <button class="nav-item" data-section="secrepeat">Repeated Text</button>
+                        <button class="nav-item" data-section="secemoji">Emoji Spam</button>
+                        <button class="nav-item" data-section="secnewline">Newline Spam</button>
+                        <button class="nav-item" data-section="seczalgo">Zalgo Text</button>
+                        <button class="nav-item" data-section="sechoist">Anti-Hoist</button>
+                        <button class="nav-item" data-section="antinuke">Anti-Nuke</button>                        
+                        <button class="nav-item" data-section="verification">Verification</button>
+                        <button class="nav-item" data-section="joingate">Join Gate</button>
+                    </div>
+                </div>
+
+                <!-- Moderation -->
+                <div class="nav-group" id="group-moderation">
+                    <button class="nav-group-header" onclick="toggleGroup('moderation')">
+                        <span>MODERATION</span>
+                        <span class="nav-chevron" id="chevron-moderation">▸</span>
+                    </button>
+                    <div class="nav-group-children" id="children-moderation">
+                        <button class="nav-item" data-section="modlog">Mod Log</button>
+                        <button class="nav-item" data-section="warnings">Warnings</button>
+                        <button class="nav-item" data-section="punishments">Punishment Ladder</button>
+                        <button class="nav-item" data-section="exemptions">Exemptions</button>
+                    </div>
+                </div>
+
+                <!-- Audit Log -->
+                <div class="nav-group" id="group-audit">
+                    <button class="nav-group-header" onclick="toggleGroup('audit')">
+                        <span>AUDIT LOG</span>
+                        <span class="nav-chevron" id="chevron-audit">▸</span>
+                    </button>
+                    <div class="nav-group-children" id="children-audit">
+                        <button class="nav-item" data-section="auditlog">Events</button>
+                        <button class="nav-item" data-section="auditconfig">Settings</button>
+                    </div>
+                </div>
+
+                <!-- Community -->
+                <div class="nav-group" id="group-community">
+                    <button class="nav-group-header" onclick="toggleGroup('community')">
+                        <span>COMMUNITY</span>
+                        <span class="nav-chevron" id="chevron-community">▸</span>
+                    </button>
+                    <div class="nav-group-children" id="children-community">
+                        <button class="nav-item" data-section="leveling">Leveling</button>
+                        <button class="nav-item" data-section="reactionroles">Reaction Roles</button>
+                        <button class="nav-item" data-section="giveaways">Giveaways</button>
+                        <button class="nav-item" data-section="polls">Polls</button>
+                        <button class="nav-item" data-section="tickets">Ticketing</button>
+                    </div>
+                </div>
+
+                <!-- Automation -->
+                <div class="nav-group" id="group-automation">
+                    <button class="nav-group-header" onclick="toggleGroup('automation')">
+                        <span>AUTOMATION</span>
+                        <span class="nav-chevron" id="chevron-automation">▸</span>
+                    </button>
+                    <div class="nav-group-children" id="children-automation">
+                        <button class="nav-item" data-section="commands">Custom Commands</button>
+                        <button class="nav-item" data-section="autoresponder">Auto-Responder</button>
+                        <button class="nav-item" data-section="scheduled">Scheduled Messages</button>
+                        <button class="nav-item" data-section="reminders">Reminders</button>
+                        <button class="nav-item" data-section="afk">AFK Status</button>
+                        <button class="nav-item" data-section="socials">Social Alerts</button>
+                    </div>
+                </div>
+
+                <!-- Configuration -->
+                <div class="nav-group" id="group-configuration">
+                    <button class="nav-group-header" onclick="toggleGroup('configuration')">
+                        <span>CONFIGURATION</span>
+                        <span class="nav-chevron" id="chevron-configuration">▸</span>
+                    </button>
+                    <div class="nav-group-children" id="children-configuration">
+                        <button class="nav-item" data-section="welcome">Welcome & Roles</button>
+                        <button class="nav-item owner-only" data-section="users">Users</button>
+                        <button class="nav-item" data-section="settings">Settings</button>
+                    </div>
+                </div>
+
             </nav>
 
             <div class="sidebar-footer">
-                <div class="status-pill">
-                    <div class="status-dot"></div>
-                    <span class="status-text">Penny online</span>
+                <div class="sb-user">
+                    <div class="sb-user-avatar" id="sb-user-avatar">?</div>
+                    <div class="sb-user-info">
+                        <div class="sb-user-name" id="sb-user-name"></div>
+                        <div class="sb-user-role" id="sb-user-role"></div>
+                    </div>
+                    <button class="logout-btn" onclick="handleLogout()">Sign out</button>
                 </div>
             </div>
         </aside>
+        <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeMobileSidebar()"></div>
 
-        <!-- REF-DASH-06 — Main Content Area -->
+        <!-- REF-DASH-06 — Main -->
         <div class="main">
 
-            <!-- REF-DASH-07 — Top Bar -->
-            <div class="topbar">
-                <div class="topbar-title" id="page-title">Overview</div>
-                <div class="topbar-right">
-                    <select class="guild-select" id="guild-select" onchange="selectGuild(this.value)">
-                        <option value="">Select Server</option>
-                    </select>       
-                    <div class="test-badge hidden" id="test-badge">TEST MODE</div>
-                    <div class="user-pill">
-                        <span id="user-pill-name"></span>
-                        <span class="user-role-badge" id="user-role-badge"></span>
-                        <button class="logout-btn" onclick="handleLogout()">Sign Out</button>
+        <!-- REF-DASH-07 — Top Bar -->
+                    <div class="topbar">
+                        <button class="hamburger" onclick="toggleMobileSidebar()">☰</button>
+                        <div class="topbar-title" id="page-title">Dashboard</div>
+                            <div class="topbar-right">
+                    <div class="status-pill">
+                        <div class="status-dot" id="status-dot"></div>
+                        <span class="status-text" id="status-text">Checking...</span>
                     </div>
+                    <div class="test-badge hidden" id="test-badge">TEST MODE</div>
+                    <button class="panic-btn" onclick="handlePanicMode()">Panic Mode</button>
+                    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()">☾</button>
                 </div>
             </div>
 
-            <!-- REF-DASH-08 — Sub Navigation -->
+            <!-- REF-DASH-08 — Sub Nav -->
             <div class="subnav" id="subnav"></div>
 
-            <!-- REF-DASH-09 — Page Content -->
+            <!-- REF-DASH-09 — Content -->
             <main class="content" id="content"></main>
 
         </div>
     </div>
+    
+    <!-- REF-DASH-10 — Global Modal -->
+    <div class="modal-overlay hidden" id="modal-overlay" onclick="handleModalOverlayClick(event)">
+        <div class="modal" id="modal">
+            <div class="modal-header">
+                <div class="modal-title" id="modal-title"></div>
+                <button class="modal-close" onclick="closeModal()">×</button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+            <div class="modal-footer" id="modal-footer"></div>
+        </div>
+    </div> 
 
     <script src="js/api.js"></script>
     <script src="js/app.js"></script>

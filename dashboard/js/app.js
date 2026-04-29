@@ -13,6 +13,7 @@ const State = {
     config:  {},
     section: 'overview',
     tab:     null,
+    theme:   'light',
 };
 
 
@@ -41,6 +42,7 @@ function saveSession(token, user) {
     localStorage.setItem('penny_user', JSON.stringify(user));
     State.token = token;
     State.user  = user;
+    State.theme = user.theme || 'light';
 }
 
 // REF-APP-05
@@ -50,6 +52,7 @@ function loadSession() {
     if (token && user) {
         State.token = token;
         State.user  = JSON.parse(user);
+        State.theme = State.user.theme || 'light';
         return true;
     }
     return false;
@@ -63,8 +66,6 @@ function clearSession() {
     State.user   = null;
     State.config = {};
 }
-
-
 // ============================================================
 // AUTH HANDLERS
 // ============================================================
@@ -180,62 +181,64 @@ async function showDashboard() {
     document.getElementById('setup-screen').classList.add('hidden');
     document.getElementById('dashboard').classList.remove('hidden');
 
-    // Apply role-based visibility
+    applyTheme(State.theme);
+
     const isOwner = State.user?.role === 'owner';
     document.querySelectorAll('.owner-only').forEach(el => {
         el.style.display = isOwner ? '' : 'none';
     });
 
-    // Populate user pill
-    document.getElementById('user-pill-name').textContent  = State.user?.username || '';
-    document.getElementById('user-role-badge').textContent = State.user?.role     || '';
-
-    // Restore saved guild selection
-    const savedGuild = localStorage.getItem('penny_guild');
-    if (savedGuild) {
-        State.guildId = savedGuild;
-        document.getElementById('guild-select').value = savedGuild;
-        await loadGuildConfig();
-    }
+    const initials = (State.user?.username || '?')[0].toUpperCase();
+    document.getElementById('sb-user-avatar').textContent = initials;
+    document.getElementById('sb-user-name').textContent   = State.user?.username || '';
+    document.getElementById('sb-user-role').textContent   = State.user?.role     || '';
 
     checkPennyStatus();
     loadGuilds();
     const savedSection = localStorage.getItem('penny_section') || 'overview';
-    setSection(savedSection);
+    setTimeout(() => setSection(savedSection), 100);
 }
-
-
 // ============================================================
 // GUILD MANAGEMENT
 // ============================================================
 
-// REF-APP-12a — Load guilds from API and populate dropdown
+// REF-APP-12a
 async function loadGuilds() {
     try {
         const guilds = await apiGet('/api/guilds');
         const select = document.getElementById('guild-select');
-        select.innerHTML = '<option value="">Select Server</option>';
+        select.innerHTML = '<option value="">Select server</option>';
         guilds.forEach(g => {
-            const opt = document.createElement('option');
+            const opt       = document.createElement('option');
             opt.value       = g.id;
             opt.textContent = g.name;
             select.appendChild(opt);
         });
 
-        // Restore previously selected guild
         const savedGuild = localStorage.getItem('penny_guild');
-        if (savedGuild) {
-            select.value  = savedGuild;
-            State.guildId = savedGuild;
-            await loadGuildConfig();
-        }
+                if (savedGuild) {
+                    select.value  = savedGuild;
+                    State.guildId = savedGuild;
+                    const guild   = guilds.find(g => g.id === savedGuild);
+                    if (guild) updateServerIcon(guild.name);
+                    await loadGuildConfig();
+                    renderContent();
+                }
     } catch(e) { console.error(e); }
+}
+
+function updateServerIcon(name) {
+    const icon = document.getElementById('sb-server-icon');
+    if (icon) icon.textContent = name ? name[0].toUpperCase() : '?';
 }
 
 // REF-APP-13
 function selectGuild(guildId) {
     State.guildId = guildId;
     localStorage.setItem('penny_guild', guildId);
+    const select = document.getElementById('guild-select');
+    const opt    = select.options[select.selectedIndex];
+    if (opt) updateServerIcon(opt.textContent);
     loadGuildConfig().then(() => renderContent());
 }
 
@@ -260,17 +263,19 @@ async function checkPennyStatus() {
         const res  = await fetch(`${window.PENNY_API_URL}/api/health`, {
             headers: { 'Authorization': `Bearer ${State.token}` }
         });
-        const dot  = document.querySelector('.status-dot');
-        const text = document.querySelector('.status-text');
+        const dot  = document.getElementById('status-dot');
+        const text = document.getElementById('status-text');
         if (res.ok) {
-            dot.classList.remove('offline');
-            text.textContent = 'Penny online';
+            dot?.classList.remove('offline');
+            if (text) text.textContent = 'Penny online';
         } else {
-            dot.classList.add('offline');
-            text.textContent = 'Penny offline';
+            dot?.classList.add('offline');
+            if (text) text.textContent = 'Penny offline';
         }
     } catch {
-        document.querySelector('.status-dot')?.classList.add('offline');
+        document.getElementById('status-dot')?.classList.add('offline');
+        const text = document.getElementById('status-text');
+        if (text) text.textContent = 'Penny offline';
     }
 }
 
@@ -282,14 +287,46 @@ async function checkPennyStatus() {
 // === SECTION DEFINITIONS ===
 // REF-APP-16
 const SECTIONS = {
-    overview:   { tabs: ['Summary', 'Activity'],                  action: null,                                         render: renderOverview   },
-    protection: { tabs: ['Modules', 'Thresholds', 'Bad Words'],   action: { label: 'Save', fn: saveProtection },       render: renderProtection },
-    exemptions: { tabs: ['Roles', 'Users', 'Channels'],           action: null,                                         render: renderExemptions },
-    moderation: { tabs: ['Mod Log', 'Warnings'],     action: null,                                         render: renderModeration },
-    auditlog:   { tabs: ['Events', 'Settings'], action: null, render: renderAuditLog },
-    welcome:    { tabs: ['Welcome Message', 'Auto Role'],         action: { label: 'Save', fn: saveWelcome },          render: renderWelcome    },
-    users:      { tabs: ['Dashboard Users'],                      action: { label: 'Add User', fn: showAddUserForm },  render: renderUsers, ownerOnly: true },
-    settings:   { tabs: ['General', 'Appearance', 'Danger Zone'], action: null,                                         render: renderSettings   },
+    overview:     { label: 'Dashboard',          tabs: ['Summary', 'Activity'],                     render: renderOverview   },
+    security:     { label: 'Auto-Mod',           tabs: ['Modules', 'Thresholds', 'Bad Words'],      render: renderSecurity   },
+    secoverview:  { label: 'Security Overview',  tabs: ['Overview'],                                render: renderSecOverview  },
+    secspam:      { label: 'Spam Detection',     tabs: ['Settings', 'Exemptions'],                  render: renderSecSpam      },
+    secraid:      { label: 'Anti-Raid',          tabs: ['Settings', 'Exemptions'],                  render: renderSecRaid      },
+    secbadwords:  { label: 'Bad Word Filter',    tabs: ['Settings', 'Word List', 'Exemptions'],     render: renderSecBadWords  },
+    seccaps:      { label: 'Caps Filter',        tabs: ['Settings', 'Exemptions'],                  render: renderSecCaps      },
+    secmention:   { label: 'Mass Mention',       tabs: ['Settings', 'Exemptions'],                  render: renderSecMention   },
+    secinvite:    { label: 'Anti-Invite Links',  tabs: ['Settings', 'Exemptions'],                  render: renderSecInvite    },
+    secage:       { label: 'Account Age Gate',   tabs: ['Settings', 'Exemptions'],                  render: renderSecAge       },
+    secphishing:  { label: 'Anti-Phishing',      tabs: ['Settings'],                                render: renderComingSoon   },
+    secantilink:  { label: 'Anti-Link',          tabs: ['Settings', 'Exemptions'],                  render: renderSecAntiLink  },
+    secrepeat:    { label: 'Repeated Text',      tabs: ['Settings', 'Exemptions'],                  render: renderSecRepeat    },
+    secemoji:     { label: 'Emoji Spam',         tabs: ['Settings', 'Exemptions'],                  render: renderSecEmoji     },
+    secnewline:   { label: 'Newline Spam',       tabs: ['Settings', 'Exemptions'],                  render: renderSecNewline   },
+    seczalgo:     { label: 'Zalgo Text',         tabs: ['Settings', 'Exemptions'],                  render: renderSecZalgo     },
+    sechoist:     { label: 'Anti-Hoist',         tabs: ['Settings', 'Exemptions'],                  render: renderSecHoist     },
+    antinuke:     { label: 'Anti-Nuke',          tabs: ['Settings'],                                render: renderComingSoon   },
+    verification: { label: 'Verification',       tabs: ['Settings'],                                render: renderComingSoon   },
+    joingate:     { label: 'Join Gate',          tabs: ['Settings'],                                render: renderComingSoon   },
+    modlog:       { label: 'Mod Log',            tabs: ['Mod Log'],                                 render: renderModLog     },
+    warnings:     { label: 'Warnings',           tabs: ['Warnings'],                                render: renderWarnings   },
+    punishments:  { label: 'Punishment Ladder',  tabs: ['Ladder'],                                  render: renderPunishments },
+    exemptions:   { label: 'Exemptions',         tabs: ['Roles', 'Users', 'Channels'],              render: renderExemptions },
+    auditlog:     { label: 'Audit Log',          tabs: ['Events'],                                  render: renderAuditLog   },
+    auditconfig:  { label: 'Audit Settings',     tabs: ['Settings'],                                render: renderAuditConfig},
+    leveling:     { label: 'Leveling',           tabs: ['Settings'],                                render: renderComingSoon },
+    reactionroles:{ label: 'Reaction Roles',     tabs: ['Roles'],                                   render: renderComingSoon },
+    giveaways:    { label: 'Giveaways',          tabs: ['Active'],                                  render: renderComingSoon },
+    polls:        { label: 'Polls',              tabs: ['Active'],                                  render: renderComingSoon },
+    tickets:      { label: 'Ticketing',          tabs: ['Settings'],                                render: renderComingSoon },
+    commands:     { label: 'Custom Commands',    tabs: ['Commands'],                                render: renderComingSoon },
+    autoresponder:{ label: 'Auto-Responder',     tabs: ['Triggers'],                                render: renderComingSoon },
+    scheduled:    { label: 'Scheduled Messages', tabs: ['Messages'],                                render: renderComingSoon },
+    reminders:    { label: 'Reminders',          tabs: ['Active'],                                  render: renderComingSoon },
+    afk:          { label: 'AFK Status',         tabs: ['Settings'],                                render: renderComingSoon },
+    socials:      { label: 'Social Alerts',      tabs: ['Integrations'],                            render: renderComingSoon },
+    welcome:      { label: 'Welcome & Roles',    tabs: ['Welcome Message', 'Auto Role'],            render: renderWelcome    },
+    users:        { label: 'Users',              tabs: ['Dashboard Users'],                         render: renderUsers,     ownerOnly: true },
+    settings:     { label: 'Settings',           tabs: ['General', 'Appearance', 'Data Management'], render: renderSettings },
 };
 
 // === SET SECTION ===
@@ -308,8 +345,8 @@ function setSection(section) {
         btn.classList.toggle('active', btn.dataset.section === section);
     });
 
-    document.getElementById('page-title').textContent =
-        section.charAt(0).toUpperCase() + section.slice(1).replace(/([A-Z])/g, ' $1');
+    document.getElementById('page-title').textContent = def.label || section;
+    openGroupForSection(section);
 
     loadGuildConfig().then(() => {
         renderSubnav();
@@ -333,14 +370,11 @@ function renderSubnav() {
     const def    = SECTIONS[State.section];
     const subnav = document.getElementById('subnav');
 
-    const noSaveTabs = ['Modules', 'Bad Words'];
-    const showAction = def.action && !noSaveTabs.includes(State.tab);
-
     let html = def.tabs.map(t =>
         `<button class="subnav-item${t === State.tab ? ' active' : ''}" data-tab="${t}" onclick="setTab('${t}')">${t}</button>`
     ).join('');
 
-    if (showAction) {
+    if (def.action) {
         html += `<div class="subnav-right"><button class="subnav-btn" onclick="${def.action.fn.name}()">${def.action.label}</button></div>`;
     }
 
@@ -380,8 +414,6 @@ async function init() {
     if (loadSession())           { showDashboard(); return; }
     showLogin();
 }
-
-
 // ============================================================
 // API HELPERS
 // ============================================================
@@ -446,11 +478,72 @@ async function apiDelete(path, body) {
 
 
 // ============================================================
+// THEME
+// ============================================================
+
+// REF-APP-64
+function applyTheme(theme) {
+    State.theme = theme;
+    if (theme === 'dark') {
+        document.body.classList.add('dark');
+        const btn = document.getElementById('theme-toggle');
+        if (btn) btn.textContent = '☀';
+    } else {
+        document.body.classList.remove('dark');
+        const btn = document.getElementById('theme-toggle');
+        if (btn) btn.textContent = '☾';
+    }
+}
+
+async function toggleTheme() {
+    const next = State.theme === 'light' ? 'dark' : 'light';
+    applyTheme(next);
+    State.user.theme = next;
+    localStorage.setItem('penny_user', JSON.stringify(State.user));
+    try {
+        await fetch(`${window.PENNY_API_URL}/auth/me/theme`, {
+            method:  'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
+            body:    JSON.stringify({ theme: next }),
+        });
+    } catch {}
+}
+
+
+// ============================================================
+// PANIC MODE
+// ============================================================
+
+// REF-APP-65
+async function handlePanicMode() {
+    if (!State.guildId) { toast('No server selected', 'error'); return; }
+    if (!confirm('Activate Panic Mode? This will lock down all channels in the server.')) return;
+    toast('Panic mode — coming soon', 'error');
+}
+
+
+// ============================================================
+// COMING SOON
+// ============================================================
+
+// REF-APP-66
+function renderComingSoon() {
+    document.getElementById('content').innerHTML = `
+        <div class="card">
+            <div class="empty-state">
+                <div class="empty-state-title">Coming soon</div>
+                <div style="font-size:13px;color:var(--text3);margin-top:6px">This feature is on the roadmap and will be available in a future update.</div>
+            </div>
+        </div>`;
+}
+
+
+// ============================================================
 // PAGE RENDERERS
 // ============================================================
 
 
-// === OVERVIEW ===
+// === OVERVIEW / DASHBOARD ===
 // REF-APP-28
 function renderOverview(tab) {
     const el = document.getElementById('content');
@@ -458,27 +551,56 @@ function renderOverview(tab) {
     if (tab === 'Summary') {
         el.innerHTML = `
             <div class="stats-grid">
-                <div class="stat-card accent">
+                <div class="stat-card blue">
                     <div class="stat-label">Actions Today</div>
                     <div class="stat-value" id="stat-actions">—</div>
+                    <div class="stat-trend" id="stat-actions-trend"></div>
                 </div>
                 <div class="stat-card green">
-                    <div class="stat-label">Spam Blocked</div>
-                    <div class="stat-value" id="stat-spam">—</div>
+                    <div class="stat-label">Members</div>
+                    <div class="stat-value" id="stat-members">—</div>
+                    <div class="stat-trend" id="stat-members-trend"></div>
                 </div>
                 <div class="stat-card red">
                     <div class="stat-label">Warnings Issued</div>
                     <div class="stat-value" id="stat-warnings">—</div>
+                    <div class="stat-trend" id="stat-warnings-trend"></div>
                 </div>
-                <div class="stat-card amber">
-                    <div class="stat-label">Test Mode</div>
-                    <div class="stat-value" id="stat-testmode">—</div>
+                <div class="stat-card gold">
+                    <div class="stat-label">Active Bans</div>
+                    <div class="stat-value" id="stat-bans">—</div>
+                    <div class="stat-trend" id="stat-bans-trend"></div>
                 </div>
             </div>
-            <div class="card">
-                <div class="card-header"><div class="card-title">Protection Status</div></div>
-                <div id="protection-status-list">
-                    <div class="empty-state"><div class="empty-state-title">No events</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                <div class="card">
+                    <div class="card-header"><div class="card-title">Module status</div></div>
+                    <div id="module-status-list">
+                        <div class="empty-state"><div class="empty-state-title">No server selected</div></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">Server health</div>
+                            <div class="card-desc">Based on your current configuration</div>
+                        </div>
+                        <div id="health-badge" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:var(--green-bg);color:var(--green)"></div>
+                    </div>
+                    <div style="padding:14px 18px">
+                        <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:8px">
+                            <span class="health-score-val" id="health-score">—</span>
+                            <span style="font-size:13px;color:var(--text3)">/100</span>
+                        </div>
+                        <div class="health-bar"><div class="health-bar-fill" id="health-bar" style="width:0%"></div></div>
+                        <div id="health-items"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="card" style="margin-top:16px">
+                <div class="card-header"><div class="card-title">Recent activity</div></div>
+                <div id="activity-feed">
+                    <div class="empty-state"><div class="empty-state-title">No server selected</div></div>
                 </div>
             </div>`;
         loadOverviewStats();
@@ -487,7 +609,7 @@ function renderOverview(tab) {
     if (tab === 'Activity') {
         el.innerHTML = `
             <div class="card">
-                <div class="card-header"><div class="card-title">Event Feed</div></div>
+                <div class="card-header"><div class="card-title">Full activity feed</div></div>
                 <div id="activity-feed">
                     <div class="empty-state"><div class="empty-state-title">No events</div></div>
                 </div>
@@ -498,84 +620,345 @@ function renderOverview(tab) {
 
 // REF-APP-29
 async function loadOverviewStats() {
-    if (!State.guildId) {
-        ['stat-actions','stat-spam','stat-warnings','stat-testmode'].forEach(id => {
-            document.getElementById(id).textContent = 'N/A';
-        });
-        document.getElementById('protection-status-list').innerHTML =
-            `<div class="empty-state"><div class="empty-state-title">No server selected</div></div>`;
-        return;
-    }
+    if (!State.guildId) return;
 
     try {
         const config = State.config;
-        document.getElementById('stat-testmode').textContent = config.test_mode ? 'ON' : 'OFF';
 
         const modules = [
-            { key: 'spam_enabled',        name: 'Spam Detection'    },
-            { key: 'raid_enabled',         name: 'Anti-Raid'         },
-            { key: 'badwords_enabled',     name: 'Bad Word Filter'   },
-            { key: 'caps_enabled',         name: 'Caps Lock Filter'  },
-            { key: 'mass_mention_enabled', name: 'Mass Mention'      },
-            { key: 'antilink_enabled',     name: 'Anti-Invite Links' },
-            { key: 'accountage_enabled',   name: 'Account Age Gate'  },
-            { key: 'antiphishing_enabled', name: 'Anti-Phishing'     },
+            { key: 'spam_enabled',        name: 'Anti-Spam'         },
+            { key: 'raid_enabled',        name: 'Anti-Raid'         },
+            { key: 'badwords_enabled',    name: 'Bad Word Filter'   },
+            { key: 'caps_enabled',        name: 'Caps Filter'       },
+            { key: 'mass_mention_enabled',name: 'Mass Mention'      },
+            { key: 'antilink_enabled',    name: 'Anti-Invite Links' },
+            { key: 'accountage_enabled',  name: 'Account Age Gate'  },
+            { key: 'antiphishing_enabled',name: 'Anti-Phishing'     },
         ];
 
-        document.getElementById('protection-status-list').innerHTML = modules.map(m => `
-            <div class="toggle-row">
-                <div class="toggle-info"><div class="toggle-name">${m.name}</div></div>
-                <span class="badge ${config[m.key] ? 'badge-join' : 'badge-spam'}">${config[m.key] ? 'ACTIVE' : 'OFF'}</span>
+        document.getElementById('module-status-list').innerHTML = modules.map(m => {
+            const on   = config[m.key];
+            const test = on && config.test_mode;
+            return `<div class="module-status-row">
+                <div class="ms-dot ${on ? 'on' : 'off'}"></div>
+                <div class="ms-name">${m.name}</div>
+                <span class="ms-badge ${test ? 'ms-test' : on ? 'ms-on' : 'ms-off'}">${test ? 'Test' : on ? 'Active' : 'Off'}</span>
+            </div>`;
+        }).join('');
+
+        const checks = [
+            { label: 'Core modules active',    ok: config.spam_enabled && config.raid_enabled, warn: false },
+            { label: 'Log channel configured', ok: !!config.log_channel_id,                   warn: false },
+            { label: 'Audit channel set',      ok: !!config.audit_channel_id,                 warn: false },
+            { label: 'Verification enabled',   ok: false,                                      warn: true  },
+            { label: 'Server backup exists',   ok: false,                                      warn: false },
+            { label: 'Test mode is off',       ok: !config.test_mode,                         warn: true  },
+        ];
+
+        const score = Math.round((checks.filter(c => c.ok).length / checks.length) * 100);
+        document.getElementById('health-score').textContent          = score;
+        document.getElementById('health-bar').style.width            = score + '%';
+        document.getElementById('health-bar').style.background       = score >= 70 ? 'var(--green)' : score >= 40 ? 'var(--amber)' : 'var(--red)';
+        document.getElementById('health-badge').textContent          = score >= 70 ? 'Good' : score >= 40 ? 'Fair' : 'Poor';
+        document.getElementById('health-badge').style.background     = score >= 70 ? 'var(--green-bg)' : score >= 40 ? 'var(--amber-bg)' : 'var(--red-bg)';
+        document.getElementById('health-badge').style.color          = score >= 70 ? 'var(--green)'    : score >= 40 ? 'var(--amber)'    : 'var(--red)';
+
+        document.getElementById('health-items').innerHTML = checks.map(c => `
+            <div class="health-item">
+                <div class="health-dot ${c.ok ? 'ok' : c.warn ? 'warn' : 'bad'}"></div>
+                <div class="health-item-label">${c.label}</div>
+                <div class="health-item-val">${c.ok ? '✓' : c.warn ? '!' : '✗'}</div>
             </div>`).join('');
 
-        const logs = await apiGet(`/api/logs/${State.guildId}?limit=100`);
-        document.getElementById('stat-actions').textContent  = logs.length;
-        document.getElementById('stat-spam').textContent     = logs.filter(l => l.action === 'SPAM DETECTED').length;
-        document.getElementById('stat-warnings').textContent = logs.filter(l => l.action === 'WARN ISSUED').length;
+        const [logs, warnings, bans] = await Promise.all([
+            apiGet(`/api/logs/${State.guildId}?limit=100`),
+            apiGet(`/api/warnings/${State.guildId}`),
+            apiGet(`/api/bans/${State.guildId}`),
+        ]);
 
-    } catch(e) { console.error(e); }
-}
+        document.getElementById('stat-actions').textContent  = logs?.length || 0;
+        document.getElementById('stat-members').textContent  = '—';
+        document.getElementById('stat-warnings').textContent = warnings?.length || 0;
+        document.getElementById('stat-bans').textContent     = bans?.length || 0;
 
-// REF-APP-30
-async function loadActivity() {
-    if (!State.guildId) {
-        document.getElementById('activity-feed').innerHTML =
-            `<div class="empty-state"><div class="empty-state-title">No server selected</div></div>`;
-        return;
-    }
-
-    try {
-        const logs     = await apiGet(`/api/logs/${State.guildId}?limit=50`);
         const feed     = document.getElementById('activity-feed');
         const colorMap = {
             'SPAM DETECTED': 'var(--red)',
             'WARN ISSUED':   'var(--amber)',
             'RAID DETECTED': '#be185d',
             'BAD WORD':      'var(--amber)',
-            'CAPS FILTER':   'var(--accent)',
+            'CAPS FILTER':   'var(--blue)',
             'INVITE LINK':   'var(--red)',
             'MASS MENTION':  'var(--red)',
         };
 
-        if (!logs.length) {
+        const recent = logs?.slice(0, 8) || [];
+        if (!recent.length) {
             feed.innerHTML = `<div class="empty-state"><div class="empty-state-title">No events logged yet</div></div>`;
-            return;
+        } else {
+            feed.innerHTML = recent.map(l => `
+                <div class="activity-item">
+                    <div class="activity-dot" style="background:${colorMap[l.action] || 'var(--text3)'}"></div>
+                    <div>
+                        <div class="activity-text"><strong>${l.action}</strong>${l.target_tag ? ' — ' + l.target_tag : ''}${l.reason && !l.target_tag ? ' — ' + l.reason.replace(/\*\*/g,'') : ''}</div>
+                        <div class="activity-time">${new Date(l.created_at).toLocaleString()}</div>
+                    </div>
+                </div>`).join('');
         }
-
-        feed.innerHTML = logs.map(l => `
-            <div class="activity-item">
-                <div class="activity-dot" style="background:${colorMap[l.action] || 'var(--text3)'}"></div>
-                <div>
-                    <div class="activity-text"><strong>${l.action}</strong>${l.reason ? ' — ' + l.reason : ''}</div>
-                    <div class="activity-time">${new Date(l.created_at).toLocaleString()}</div>
-                </div>
-            </div>`).join('');
 
     } catch(e) { console.error(e); }
 }
 
+// REF-APP-30
+async function loadActivity() {
+    if (!State.guildId) return;
+    try {
+        const logs = await apiGet(`/api/logs/${State.guildId}?limit=100`);
+        const feed = document.getElementById('activity-feed');
+        const colorMap = {
+            'SPAM DETECTED': 'var(--red)',
+            'WARN ISSUED':   'var(--amber)',
+            'RAID DETECTED': '#be185d',
+            'BAD WORD':      'var(--amber)',
+            'CAPS FILTER':   'var(--blue)',
+            'INVITE LINK':   'var(--red)',
+            'MASS MENTION':  'var(--red)',
+        };
+        if (!logs?.length) {
+            feed.innerHTML = `<div class="empty-state"><div class="empty-state-title">No events logged yet</div></div>`;
+            return;
+        }
+        feed.innerHTML = logs.map(l => `
+            <div class="activity-item">
+                <div class="activity-dot" style="background:${colorMap[l.action] || 'var(--text3)'}"></div>
+                <div>
+                    <div class="activity-text"><strong>${l.action}</strong>${l.target_tag ? ' — ' + l.target_tag : ''}</div>
+                    <div class="activity-time">${new Date(l.created_at).toLocaleString()}</div>
+                </div>
+            </div>`).join('');
+    } catch(e) { console.error(e); }
+}
 
-// === PROTECTION ===
+
+// REF-APP-31a
+function renderSecurity(tab) { renderProtection(tab); }
+
+// REF-APP-44h
+function renderModLog() {
+    const el = document.getElementById('content');
+    el.innerHTML = `
+        <div class="card">
+            <table class="data-table">
+                <thead><tr><th>Event</th><th>Target</th><th>Moderator</th><th>Reason</th><th>Time</th></tr></thead>
+                <tbody id="modlog-body">
+                    <tr><td colspan="5" class="table-loading">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>`;
+    loadModLog();
+}
+
+// REF-APP-44i
+function renderWarnings() {
+    const el = document.getElementById('content');
+    el.innerHTML = `
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">Warnings</div>
+                <div style="display:flex;gap:8px">
+                    <input class="add-input" id="warn-lookup" placeholder="Filter by User ID" style="width:180px">
+                    <button class="add-btn" onclick="lookupWarnings()">Filter</button>
+                    <button class="btn-secondary" onclick="loadAllWarnings()">Show All</button>
+                </div>
+            </div>
+            <table class="data-table">
+                <thead><tr><th>User</th><th>Reason</th><th>Issued By</th><th>Time</th></tr></thead>
+                <tbody id="warnings-body"><tr><td colspan="4" class="table-loading">Loading...</td></tr></tbody>
+            </table>
+        </div>`;
+    loadAllWarnings();
+}
+
+// REF-APP-44j
+function renderAuditConfig() { renderAuditLog('Settings'); }
+
+// === PUNISHMENT LADDER ===
+// REF-APP-69
+async function renderPunishments() {
+    const el = document.getElementById('content');
+    el.innerHTML = `
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <div class="card-title">Punishment Ladder</div>
+                    <div class="card-desc">Define escalating punishments based on warning count. Each step triggers when a user reaches that warning number.</div>
+                </div>
+                <button class="btn-primary" onclick="addLadderStep()">Add Step</button>
+            </div>
+            <div id="ladder-steps">
+                <div class="empty-state"><div class="empty-state-title">Loading...</div></div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><div class="card-title">Ladder Settings</div></div>
+            <div class="settings-row">
+                <div>
+                    <div class="settings-label">Reset warnings after kick</div>
+                    <div style="font-size:12px;color:var(--text3)">Warning count goes to 0 when a user is kicked</div>
+                </div>
+                <label class="toggle">
+                    <input type="checkbox" id="reset_on_kick" onchange="savePunishmentSettings()">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="settings-row">
+                <div>
+                    <div class="settings-label">Reset warnings after ban</div>
+                    <div style="font-size:12px;color:var(--text3)">Warning count goes to 0 when a user is banned</div>
+                </div>
+                <label class="toggle">
+                    <input type="checkbox" id="reset_on_ban" onchange="savePunishmentSettings()">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>`;
+
+    await loadLadder();
+    await loadPunishmentSettings();
+}
+
+async function loadLadder() {
+    if (!State.guildId) {
+        document.getElementById('ladder-steps').innerHTML =
+            `<div class="empty-state"><div class="empty-state-title">No server selected</div></div>`;
+        return;
+    }
+    try {
+        const steps = await apiGet(`/api/ladder/${State.guildId}`);
+        renderLadderSteps(steps);
+    } catch(e) { console.error(e); }
+}
+
+function renderLadderSteps(steps) {
+    const el = document.getElementById('ladder-steps');
+    if (!steps.length) {
+        el.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-title">No steps configured</div>
+                <div style="font-size:13px;color:var(--text3);margin-top:6px">Click "Add Step" to build your ladder</div>
+            </div>`;
+        return;
+    }
+
+    el.innerHTML = steps.map(s => `
+        <div class="ladder-step" id="step-${s.step}">
+            <div class="ladder-step-num">Warning ${s.step}</div>
+            <div class="ladder-step-body">
+                <div class="ladder-row">
+                    <div class="thr-label">Action</div>
+                    <select class="settings-input" style="width:140px" onchange="updateLadderStep(${s.step}, this)" data-field="action">
+                        <option value="dm"      ${s.action==='dm'      ? 'selected':''}>DM Only</option>
+                        <option value="mute"    ${s.action==='mute'    ? 'selected':''}>Mute</option>
+                        <option value="kick"    ${s.action==='kick'    ? 'selected':''}>Kick</option>
+                        <option value="tempban" ${s.action==='tempban' ? 'selected':''}>Temp Ban</option>
+                        <option value="ban"     ${s.action==='ban'     ? 'selected':''}>Permanent Ban</option>
+                    </select>
+                </div>
+                <div class="ladder-row" id="duration-row-${s.step}" style="${['mute','tempban'].includes(s.action) ? '' : 'display:none'}">
+                    <div class="thr-label">Duration</div>
+                    <input class="thr-input" type="number" value="${s.duration || 1}" min="1" id="duration-${s.step}" style="width:70px">
+                    <select class="settings-input" style="width:110px" id="duration-unit-${s.step}">
+                        <option value="minutes" ${s.duration_unit==='minutes' ? 'selected':''}>Minutes</option>
+                        <option value="hours"   ${s.duration_unit==='hours'   ? 'selected':''}>Hours</option>
+                        <option value="days"    ${s.duration_unit==='days'    ? 'selected':''}>Days</option>
+                    </select>
+                </div>
+                <div class="ladder-row">
+                    <div class="thr-label">Custom DM</div>
+                    <input class="settings-input" style="width:280px" placeholder="Leave blank for default warning message" value="${s.custom_dm || ''}" id="custom-dm-${s.step}">
+                </div>
+                <div class="ladder-row">
+                    <div class="thr-label">Reset warnings after this step</div>
+                    <label class="toggle">
+                        <input type="checkbox" id="reset-after-${s.step}" ${s.reset_after ? 'checked' : ''}>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="ladder-step-actions">
+                <button class="btn-primary" style="font-size:12px;padding:6px 12px" onclick="saveLadderStep(${s.step})">Save</button>
+                <button class="btn-danger" style="font-size:12px;padding:6px 12px" onclick="deleteLadderStep(${s.step})">Remove</button>
+            </div>
+        </div>`).join('');
+}
+
+async function addLadderStep() {
+    if (!State.guildId) { toast('No server selected', 'error'); return; }
+    try {
+        const steps = await apiGet(`/api/ladder/${State.guildId}`);
+        const nextStep = steps.length ? Math.max(...steps.map(s => s.step)) + 1 : 1;
+        await apiPost(`/api/ladder/${State.guildId}`, {
+            step: nextStep, action: 'dm',
+        });
+        await loadLadder();
+        toast(`Step ${nextStep} added`);
+    } catch(e) { toast('Failed', 'error'); }
+}
+
+async function saveLadderStep(step) {
+    if (!State.guildId) return;
+    try {
+        await apiPost(`/api/ladder/${State.guildId}`, {
+            step,
+            action:        document.getElementById(`action-select-${step}`)?.value || document.querySelector(`#step-${step} select`)?.value || 'dm',
+            duration:      parseInt(document.getElementById(`duration-${step}`)?.value) || null,
+            duration_unit: document.getElementById(`duration-unit-${step}`)?.value || null,
+            custom_dm:     document.getElementById(`custom-dm-${step}`)?.value || null,
+            reset_after:   document.getElementById(`reset-after-${step}`)?.checked || false,
+        });
+        toast(`Step ${step} saved`);
+    } catch(e) { toast('Failed to save', 'error'); }
+}
+
+async function deleteLadderStep(step) {
+    if (!State.guildId) return;
+    if (!confirm(`Remove warning ${step} from the ladder?`)) return;
+    try {
+        await apiDelete(`/api/ladder/${State.guildId}/${step}`);
+        await loadLadder();
+        toast(`Step ${step} removed`);
+    } catch(e) { toast('Failed', 'error'); }
+}
+
+function updateLadderStep(step, select) {
+    const durationRow = document.getElementById(`duration-row-${step}`);
+    if (durationRow) {
+        durationRow.style.display = ['mute','tempban'].includes(select.value) ? '' : 'none';
+    }
+}
+
+async function loadPunishmentSettings() {
+    if (!State.guildId) return;
+    try {
+        const s = await apiGet(`/api/punishment-settings/${State.guildId}`);
+        document.getElementById('reset_on_kick').checked = !!s.reset_on_kick;
+        document.getElementById('reset_on_ban').checked  = !!s.reset_on_ban;
+    } catch(e) { console.error(e); }
+}
+
+async function savePunishmentSettings() {
+    if (!State.guildId) return;
+    try {
+        await apiPost(`/api/punishment-settings/${State.guildId}`, {
+            reset_on_kick: document.getElementById('reset_on_kick').checked,
+            reset_on_ban:  document.getElementById('reset_on_ban').checked,
+            per_module:    false,
+        });
+        toast('Settings saved');
+    } catch(e) { toast('Failed', 'error'); }
+}
+
+// === PROTECTION (Security) ===
 // REF-APP-31
 function renderProtection(tab) {
     const el = document.getElementById('content');
@@ -586,13 +969,13 @@ function renderProtection(tab) {
             <div class="card">
                 <div class="card-header"><div class="card-title">Modules</div></div>
                 ${moduleRow('spam_enabled',        'Spam Detection',    'spam_action',         c)}
-                ${moduleRow('raid_enabled',         'Anti-Raid',         'raid_action',         c)}
-                ${moduleRow('badwords_enabled',     'Bad Word Filter',   'badwords_action',     c)}
-                ${moduleRow('caps_enabled',         'Caps Lock Filter',  'caps_action',         c)}
-                ${moduleRow('mass_mention_enabled', 'Mass Mention',      'mass_mention_action', c)}
-                ${moduleRow('antilink_enabled',     'Anti-Invite Links', 'antilink_action',     c)}
-                ${moduleRow('accountage_enabled',   'Account Age Gate',  null,                  c)}
-                ${moduleRow('antiphishing_enabled', 'Anti-Phishing',     null,                  c)}
+                ${moduleRow('raid_enabled',        'Anti-Raid',         'raid_action',         c)}
+                ${moduleRow('badwords_enabled',    'Bad Word Filter',   'badwords_action',     c)}
+                ${moduleRow('caps_enabled',        'Caps Lock Filter',  'caps_action',         c)}
+                ${moduleRow('mass_mention_enabled','Mass Mention',      'mass_mention_action', c)}
+                ${moduleRow('antilink_enabled',    'Anti-Invite Links', 'antilink_action',     c)}
+                ${moduleRow('accountage_enabled',  'Account Age Gate',  null,                  c)}
+                ${moduleRow('antiphishing_enabled','Anti-Phishing',     null,                  c)}
             </div>`;
     }
 
@@ -600,15 +983,18 @@ function renderProtection(tab) {
         el.innerHTML = `
             <div class="card">
                 <div class="card-header"><div class="card-title">Thresholds</div></div>
-                ${thrRow('spam_max_messages',   'Spam — max messages',      c.spam_max_messages   || 5,     'messages')}
-                ${thrRow('spam_window_ms',      'Spam — window',            c.spam_window_ms      || 5000,  'ms')}
-                ${thrRow('raid_max_joins',      'Raid — max joins',         c.raid_max_joins      || 5,     'joins')}
-                ${thrRow('raid_window_ms',      'Raid — window',            c.raid_window_ms      || 10000, 'ms')}
-                ${thrRow('caps_threshold',      'Caps — threshold',         c.caps_threshold      || 0.7,   '%')}
-                ${thrRow('caps_min_length',     'Caps — min length',        c.caps_min_length     || 10,    'chars')}
-                ${thrRow('mass_mention_max',    'Mass mention — max',       c.mass_mention_max    || 5,     'mentions')}
-                ${thrRow('accountage_min_days', 'Account age — minimum',    c.accountage_min_days || 7,     'days')}
+                ${thrRow('spam_max_messages',   'Spam (max messages)',      c.spam_max_messages   || 5,     'messages')}
+                ${thrRow('spam_window_ms',      'Spam (window)',            c.spam_window_ms      || 5000,  'ms')}
+                ${thrRow('raid_max_joins',      'Raid (max joins)',         c.raid_max_joins      || 5,     'joins')}
+                ${thrRow('raid_window_ms',      'Raid (window)',            c.raid_window_ms      || 10000, 'ms')}
+                ${thrRow('caps_threshold',      'Caps (threshold)',         c.caps_threshold      || 0.7,   '%')}
+                ${thrRow('caps_min_length',     'Caps (min length)',        c.caps_min_length     || 10,    'chars')}
+                ${thrRow('mass_mention_max',    'Mass mention (max)',       c.mass_mention_max    || 5,     'mentions')}
+                ${thrRow('accountage_min_days', 'Account age (minimum)',    c.accountage_min_days || 7,     'days')}
                 ${thrRow('max_warnings',        'Max warnings before kick', c.max_warnings        || 3,     'warnings')}
+                <div class="card-footer">
+                    <button class="btn-primary" onclick="saveProtection()">Save</button>
+                </div>
             </div>`;
     }
 
@@ -637,9 +1023,7 @@ function moduleRow(key, name, actionKey, config) {
         : '';
     return `
         <div class="toggle-row">
-            <div class="toggle-info">
-                <div class="toggle-name">${name}</div>
-            </div>
+            <div class="toggle-info"><div class="toggle-name">${name}</div></div>
             <div class="toggle-right">
                 ${pill}
                 <label class="toggle">
@@ -690,28 +1074,14 @@ function cycleAction(el, key) {
 // REF-APP-37
 async function saveProtection() {
     if (!State.guildId) { toast('No server selected', 'error'); return; }
-
-    if (State.tab === 'Thresholds') {
-        const inputs = document.querySelectorAll('.thr-input[data-key]');
-        const updates = {};
-        inputs.forEach(i => { updates[i.dataset.key] = parseFloat(i.value); });
-        try {
-            await apiPut(`/api/config/${State.guildId}`, updates);
-            Object.assign(State.config, updates);
-            toast('Thresholds saved');
-        } catch(e) { toast('Failed to save', 'error'); }
-        return;
-    }
-
-    if (State.tab === 'Modules') {
-        toast('Modules save automatically when toggled');
-        return;
-    }
-
-    if (State.tab === 'Bad Words') {
-        toast('Words save automatically when added or removed');
-        return;
-    }
+    const inputs  = document.querySelectorAll('.thr-input[data-key]');
+    const updates = {};
+    inputs.forEach(i => { updates[i.dataset.key] = parseFloat(i.value); });
+    try {
+        await apiPut(`/api/config/${State.guildId}`, updates);
+        Object.assign(State.config, updates);
+        toast('Thresholds saved');
+    } catch(e) { toast('Failed to save', 'error'); }
 }
 
 // REF-APP-38
@@ -758,7 +1128,7 @@ function renderExemptions(tab) {
         <div class="card">
             <div class="card-header"><div class="card-title">Exempt ${tab}</div></div>
             <div id="exempt-list" style="padding:16px 20px">
-                <div class="empty-state"><div class="empty-state-title">No events</div></div>
+                <div class="empty-state"><div class="empty-state-title">Loading...</div></div>
             </div>
             <div style="padding:0 20px 16px;display:flex;gap:8px">
                 <input class="add-input" id="exempt-input" placeholder="${ph[type]}">
@@ -818,54 +1188,11 @@ async function removeExemption(type, targetId) {
 }
 
 
-// === MODERATION ===
+// === MODERATION (legacy — kept for compatibility) ===
 // REF-APP-44
 function renderModeration(tab) {
-    const el = document.getElementById('content');
-
-    if (tab === 'Mod Log') {
-        el.innerHTML = `
-            <div class="card">
-                <table class="data-table">
-                    <thead><tr><th>Event</th><th>Target</th><th>Moderator</th><th>Reason</th><th>Time</th></tr></thead>
-                    <tbody id="modlog-body">
-                        <tr><td colspan="5" class="table-loading">No events</td></tr>
-                    </tbody>
-                </table>
-            </div>`;
-        loadModLog();
-    }
-
-    if (tab === 'Warnings') {
-        el.innerHTML = `
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title">Warnings</div>
-                    <div style="display:flex;gap:8px">
-                        <input class="add-input" id="warn-lookup" placeholder="Filter by User ID" style="width:180px">
-                        <button class="add-btn" onclick="lookupWarnings()">Filter</button>
-                        <button class="btn-secondary" onclick="loadAllWarnings()">Show All</button>
-                    </div>
-                </div>
-                <table class="data-table">
-                    <thead><tr><th>User</th><th>Reason</th><th>Issued By</th><th>Time</th></tr></thead>
-                    <tbody id="warnings-body"><tr><td colspan="4" class="table-loading">No events</td></tr></tbody>
-                </table>
-            </div>`;
-        loadAllWarnings();
-    }
-
-    if (tab === 'Audit Log') {
-        el.innerHTML = `
-            <div class="card">
-                <table class="data-table">
-                    <thead><tr><th>Event</th><th>Target</th><th>By</th><th>Time</th></tr></thead>
-                    <tbody>
-                        <tr><td colspan="4" class="table-loading">No audit events yet</td></tr>
-                    </tbody>
-                </table>
-            </div>`;
-    }
+    if (tab === 'Mod Log') renderModLog();
+    if (tab === 'Warnings') renderWarnings();
 }
 
 // REF-APP-45
@@ -939,6 +1266,7 @@ async function loadAllWarnings() {
     } catch(e) { console.error(e); }
 }
 
+
 // === WELCOME & ROLES ===
 // REF-APP-47
 function renderWelcome(tab) {
@@ -964,6 +1292,9 @@ function renderWelcome(tab) {
                     <div class="settings-label">Message</div>
                     <input class="settings-input" id="welcome_message" value="${c.welcome_message || 'Welcome to {server}, {user}!'}" placeholder="{user} {server}">
                 </div>
+                <div class="card-footer">
+                    <button class="btn-primary" onclick="saveWelcome()">Save</button>
+                </div>
             </div>`;
     }
 
@@ -981,6 +1312,9 @@ function renderWelcome(tab) {
                 <div class="settings-row">
                     <div class="settings-label">Role ID</div>
                     <input class="settings-input" id="autorole_id" value="${c.autorole_id || ''}" placeholder="Role ID">
+                </div>
+                <div class="card-footer">
+                    <button class="btn-primary" onclick="saveWelcome()">Save</button>
                 </div>
             </div>`;
     }
@@ -1004,36 +1338,25 @@ async function saveWelcome() {
 }
 
 
-// === USERS (OWNER ONLY) ===
+// === USERS ===
 // REF-APP-49
 function renderUsers() {
     const el = document.getElementById('content');
     el.innerHTML = `
         <div class="card">
+            <div class="card-header">
+                <div class="card-title">Dashboard Users</div>
+                <div style="display:flex;gap:8px">
+                    <button class="btn-secondary" onclick="openEditMyProfileModal()">My Profile</button>
+                    <button class="btn-primary" onclick="openCreateUserModal()">Create User</button>
+                </div>
+            </div>
             <table class="data-table">
                 <thead><tr><th>User</th><th>Role</th><th>Discord ID</th><th>Last Login</th><th></th></tr></thead>
                 <tbody id="users-body">
-                    <tr><td colspan="5" class="table-loading">No events</td></tr>
+                    <tr><td colspan="5" class="table-loading">Loading...</td></tr>
                 </tbody>
             </table>
-        </div>
-        <div class="card" id="add-user-card">
-            <div class="card-header"><div class="card-title">Add Admin</div></div>
-            <div class="settings-row">
-                <div class="settings-label">Username</div>
-                <input class="settings-input" id="new-username" placeholder="Username">
-            </div>
-            <div class="settings-row">
-                <div class="settings-label">Password</div>
-                <input class="settings-input" type="password" id="new-password" placeholder="Min 8 characters">
-            </div>
-            <div class="settings-row">
-                <div class="settings-label">Discord ID</div>
-                <input class="settings-input" id="new-discord" placeholder="Optional">
-            </div>
-            <div class="card-footer">
-                <button class="btn-primary" onclick="createAdminUser()">Create Admin</button>
-            </div>
         </div>`;
     loadUsers();
 }
@@ -1060,12 +1383,16 @@ async function loadUsers() {
                 <td>
                     ${u.id !== State.user?.id ? `
                         <div style="display:flex;gap:6px">
+                            <button class="action-pill" onclick="openEditUserModal(${u.id},'${u.username}','${u.discord_id||''}')">Edit</button>
                             <button class="action-pill" onclick="toggleUserRole(${u.id},'${u.role}')">
                                 ${u.role === 'admin' ? 'Make Owner' : 'Make Admin'}
                             </button>
                             <button class="btn-danger" style="font-size:12px;padding:5px 12px" onclick="deleteUser(${u.id})">Remove</button>
-                        </div>` 
-                    : '<span style="color:var(--text3);font-size:12px">You</span>'}
+                        </div>`
+                    : `<div style="display:flex;gap:6px">
+                            <button class="action-pill" onclick="openEditMyProfileModal()">Edit</button>
+                            <span style="color:var(--text3);font-size:12px;padding:5px 0">You</span>
+                        </div>`}
                 </td>
             </tr>`).join('');
     } catch(e) { console.error(e); }
@@ -1114,6 +1441,75 @@ function showAddUserForm() {
     document.getElementById('add-user-card')?.scrollIntoView({ behavior: 'smooth' });
 }
 
+// REF-APP-52a
+let _editingUserId = null;
+
+function openEditUser(id, username, discordId) {
+    _editingUserId = id;
+    document.getElementById('edit-user-title').textContent = `Edit User — ${username}`;
+    document.getElementById('edit-username').value = '';
+    document.getElementById('edit-password').value = '';
+    document.getElementById('edit-discord').value  = discordId || '';
+    document.getElementById('edit-user-card').style.display = '';
+    document.getElementById('edit-user-card').scrollIntoView({ behavior: 'smooth' });
+}
+
+function closeEditUser() {
+    _editingUserId = null;
+    document.getElementById('edit-user-card').style.display = 'none';
+}
+
+async function submitEditUser() {
+    if (!_editingUserId) return;
+    const username   = document.getElementById('edit-username').value.trim();
+    const password   = document.getElementById('edit-password').value;
+    const discord_id = document.getElementById('edit-discord').value.trim();
+    const body = {};
+    if (username)            body.username   = username;
+    if (password)            body.password   = password;
+    body.discord_id = discord_id || null;
+    try {
+        const res = await fetch(`${window.PENNY_API_URL}/auth/users/${_editingUserId}`, {
+            method:  'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
+            body:    JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) { toast(data.error || 'Failed', 'error'); return; }
+        toast('User updated');
+        closeEditUser();
+        loadUsers();
+    } catch(e) { toast('Failed', 'error'); }
+}
+
+// REF-APP-52b
+async function saveMyProfile() {
+    const username   = document.getElementById('me-username').value.trim();
+    const password   = document.getElementById('me-password').value;
+    const discord_id = document.getElementById('me-discord').value.trim();
+    const body = {};
+    if (username) body.username   = username;
+    if (password) body.password   = password;
+    body.discord_id = discord_id || null;
+    try {
+        const res  = await fetch(`${window.PENNY_API_URL}/auth/me`, {
+            method:  'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
+            body:    JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) { toast(data.error || 'Failed', 'error'); return; }
+        if (data.user) {
+            State.user = { ...State.user, ...data.user };
+            localStorage.setItem('penny_user', JSON.stringify(State.user));
+            document.getElementById('sb-user-name').textContent = State.user.username;
+        }
+        toast('Profile saved');
+        document.getElementById('me-username').value = '';
+        document.getElementById('me-password').value = '';
+    } catch(e) { toast('Failed', 'error'); }
+}
+
 // REF-APP-53
 async function deleteUser(id) {
     if (!confirm('Remove this user?')) return;
@@ -1127,6 +1523,7 @@ async function deleteUser(id) {
     } catch(e) { toast('Failed', 'error'); }
 }
 
+
 // === AUDIT LOG ===
 // REF-APP-44a
 function renderAuditLog(tab) {
@@ -1137,19 +1534,17 @@ function renderAuditLog(tab) {
             <div class="card">
                 <div class="card-header">
                     <div class="card-title">Audit Events</div>
-                    <div style="display:flex;gap:8px">
-                        <select class="guild-select" id="audit-category" onchange="filterAuditLog()" style="font-size:12px">
-                            <option value="">All Categories</option>
-                            <option value="messages">Messages</option>
-                            <option value="members">Members</option>
-                            <option value="server">Server</option>
-                            <option value="voice">Voice</option>
-                        </select>
-                    </div>
+                    <select class="settings-input" id="audit-category" onchange="filterAuditLog()" style="width:160px;font-size:12px">
+                        <option value="">All Categories</option>
+                        <option value="messages">Messages</option>
+                        <option value="members">Members</option>
+                        <option value="server">Server</option>
+                        <option value="voice">Voice</option>
+                    </select>
                 </div>
                 <table class="data-table">
                     <thead><tr><th>Event</th><th>Category</th><th>Target</th><th>Moderator</th><th>Detail</th><th>Time</th></tr></thead>
-                    <tbody id="audit-body"><tr><td colspan="5" class="table-loading">No events</td></tr></tbody>
+                    <tbody id="audit-body"><tr><td colspan="6" class="table-loading">Loading...</td></tr></tbody>
                 </table>
             </div>`;
         loadAuditLog();
@@ -1223,7 +1618,7 @@ async function loadAuditLog(category = null) {
         const body = document.getElementById('audit-body');
         const colorMap = { messages: 'badge-warn', members: 'badge-join', server: 'badge-caps', voice: 'badge-admin' };
         if (!logs.length) {
-            body.innerHTML = `<tr><td colspan="5" class="table-loading">No audit events yet</td></tr>`;
+            body.innerHTML = `<tr><td colspan="6" class="table-loading">No audit events yet</td></tr>`;
             return;
         }
         body.innerHTML = logs.map(l => `
@@ -1274,6 +1669,7 @@ async function saveAuditSettings() {
     } catch(e) { toast('Failed to save', 'error'); }
 }
 
+
 // === SETTINGS ===
 // REF-APP-54
 function renderSettings(tab) {
@@ -1296,10 +1692,6 @@ function renderSettings(tab) {
                     <input class="settings-input" id="log_channel_id" value="${c.log_channel_id || ''}" placeholder="Channel ID">
                 </div>
                 <div class="settings-row">
-                    <div class="settings-label">Immune Role ID</div>
-                    <input class="settings-input" id="immune_role_id" value="${c.immune_role_id || ''}" placeholder="Role ID">
-                </div>
-                <div class="settings-row">
                     <div class="settings-label">Max Warnings</div>
                     <input class="settings-input" type="number" id="max_warnings" value="${c.max_warnings || 3}" style="width:80px">
                 </div>
@@ -1314,25 +1706,6 @@ function renderSettings(tab) {
             <div class="card">
                 <div class="card-header"><div class="card-title">Appearance</div></div>
                 <div class="settings-row">
-                    <div class="settings-label">Theme</div>
-                    <div class="theme-row">
-                        <div class="theme-opt active" onclick="setTheme(this,'light')">Light</div>
-                        <div class="theme-opt" onclick="setTheme(this,'slate')">Slate</div>
-                        <div class="theme-opt" onclick="setTheme(this,'dark')">Dark</div>
-                    </div>
-                </div>
-                <div class="settings-row">
-                    <div class="settings-label">Accent</div>
-                    <div class="swatch-row">
-                        <div class="swatch active" style="background:#1d4ed8" onclick="setAccent(this,'#1d4ed8','#eff6ff','#bfdbfe')"></div>
-                        <div class="swatch" style="background:#059669" onclick="setAccent(this,'#059669','#ecfdf5','#a7f3d0')"></div>
-                        <div class="swatch" style="background:#7c3aed" onclick="setAccent(this,'#7c3aed','#f5f3ff','#ddd6fe')"></div>
-                        <div class="swatch" style="background:#dc2626" onclick="setAccent(this,'#dc2626','#fef2f2','#fecaca')"></div>
-                        <div class="swatch" style="background:#d97706" onclick="setAccent(this,'#d97706','#fffbeb','#fde68a')"></div>
-                        <div class="swatch" style="background:#0891b2" onclick="setAccent(this,'#0891b2','#ecfeff','#a5f3fc')"></div>
-                    </div>
-                </div>
-                <div class="settings-row">
                     <div class="settings-label">Avatar</div>
                     <input type="file" id="avatar-upload" accept="image/*" onchange="uploadAvatar(this)" style="font-size:13px">
                 </div>
@@ -1346,23 +1719,53 @@ function renderSettings(tab) {
             </div>`;
     }
 
-    if (tab === 'Danger Zone') {
+    if (tab === 'Data Management') {
         el.innerHTML = `
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">Export Data</div>
+                        <div class="card-desc">Download all server data as a JSON file</div>
+                    </div>
+                    <button class="btn-primary" onclick="exportData()">Export</button>
+                </div>
+            </div>
             <div class="card" style="border-color:#fecaca">
-                <div class="danger-header">
-                    <div class="danger-title">Irreversible Actions</div>
+                <div class="danger-header"><div class="danger-title">Danger Zone (*All actions are irreversible*)</div></div>
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-label">Clear Mod Logs</div>
+                        <div style="font-size:12px;color:var(--text3)">Permanently deletes all mod log entries for this server</div>
+                    </div>
+                    <button class="btn-danger" onclick="dangerClear('logs', 'mod logs')">Clear</button>
                 </div>
                 <div class="settings-row">
-                    <div class="settings-label">Reset Config</div>
-                    <button class="btn-danger" onclick="dangerResetConfig()">Reset</button>
+                    <div>
+                        <div class="settings-label">Clear Audit Logs</div>
+                        <div style="font-size:12px;color:var(--text3)">Permanently deletes all audit log entries for this server</div>
+                    </div>
+                    <button class="btn-danger" onclick="dangerClear('audit', 'audit logs')">Clear</button>
                 </div>
                 <div class="settings-row">
-                    <div class="settings-label">Clear Mod Logs</div>
-                    <button class="btn-danger" onclick="dangerClearLogs()">Clear</button>
+                    <div>
+                        <div class="settings-label">Clear Warnings</div>
+                        <div style="font-size:12px;color:var(--text3)">Permanently deletes all warnings for this server</div>
+                    </div>
+                    <button class="btn-danger" onclick="dangerClear('warnings', 'warnings')">Clear</button>
                 </div>
                 <div class="settings-row">
-                    <div class="settings-label">Clear Warnings</div>
-                    <button class="btn-danger" onclick="dangerClearWarnings()">Clear</button>
+                    <div>
+                        <div class="settings-label">Clear Ban Records</div>
+                        <div style="font-size:12px;color:var(--text3)">Removes ban history from Penny's database (does not unban on Discord)</div>
+                    </div>
+                    <button class="btn-danger" onclick="dangerClear('bans', 'ban records')">Clear</button>
+                </div>
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-label">Clear Punishment Ladder</div>
+                        <div style="font-size:12px;color:var(--text3)">Resets the punishment ladder (bot falls back to default behavior)</div>
+                    </div>
+                    <button class="btn-danger" onclick="dangerClear('ladder', 'punishment ladder')">Clear</button>
                 </div>
             </div>`;
     }
@@ -1374,7 +1777,6 @@ async function saveGeneral() {
     const updates = {
         test_mode:      document.getElementById('test_mode').checked,
         log_channel_id: document.getElementById('log_channel_id').value.trim(),
-        immune_role_id: document.getElementById('immune_role_id').value.trim(),
         max_warnings:   parseInt(document.getElementById('max_warnings').value),
     };
     try {
@@ -1390,58 +1792,6 @@ async function saveGeneral() {
 // ============================================================
 // APPEARANCE
 // ============================================================
-
-// REF-APP-56
-function setTheme(el, theme) {
-    document.querySelectorAll('.theme-opt').forEach(t => t.classList.remove('active'));
-    el.classList.add('active');
-    applyTheme(theme);
-    localStorage.setItem('penny_theme', theme);
-}
-
-// REF-APP-57
-function applyTheme(theme) {
-    const r = document.documentElement;
-    if (theme === 'dark') {
-        r.style.setProperty('--bg',       '#0f172a');
-        r.style.setProperty('--surface',  '#1e293b');
-        r.style.setProperty('--surface2', '#273344');
-        r.style.setProperty('--text',     '#f1f5f9');
-        r.style.setProperty('--text2',    '#94a3b8');
-        r.style.setProperty('--text3',    '#64748b');
-        r.style.setProperty('--border',   '#334155');
-        r.style.setProperty('--border2',  '#475569');
-    } else if (theme === 'slate') {
-        r.style.setProperty('--bg',       '#e8edf4');
-        r.style.setProperty('--surface',  '#f4f7fb');
-        r.style.setProperty('--surface2', '#edf1f7');
-        r.style.setProperty('--text',     '#1e293b');
-        r.style.setProperty('--text2',    '#64748b');
-        r.style.setProperty('--text3',    '#94a3b8');
-        r.style.setProperty('--border',   '#d0dae8');
-        r.style.setProperty('--border2',  '#c0ccdc');
-    } else {
-        r.style.setProperty('--bg',       '#f3f4f6');
-        r.style.setProperty('--surface',  '#ffffff');
-        r.style.setProperty('--surface2', '#f8fafc');
-        r.style.setProperty('--text',     '#111827');
-        r.style.setProperty('--text2',    '#6b7280');
-        r.style.setProperty('--text3',    '#9ca3af');
-        r.style.setProperty('--border',   '#e5e7eb');
-        r.style.setProperty('--border2',  '#d1d5db');
-    }
-}
-
-// REF-APP-58
-function setAccent(el, color, bgLight, border) {
-    document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
-    el.classList.add('active');
-    document.documentElement.style.setProperty('--accent',        color);
-    document.documentElement.style.setProperty('--accent-hover',  color);
-    document.documentElement.style.setProperty('--accent-light',  bgLight);
-    document.documentElement.style.setProperty('--accent-border', border);
-    localStorage.setItem('penny_accent', JSON.stringify({ color, bgLight, border }));
-}
 
 // REF-APP-59
 function uploadAvatar(input) {
@@ -1473,18 +1823,8 @@ function saveAppearance() {
 
 // REF-APP-62
 function restoreAppearance() {
-    const theme  = localStorage.getItem('penny_theme');
-    const accent = localStorage.getItem('penny_accent');
     const avatar = localStorage.getItem('penny_avatar');
     const title  = localStorage.getItem('penny_title');
-    if (theme)  applyTheme(theme);
-    if (accent) {
-        const a = JSON.parse(accent);
-        document.documentElement.style.setProperty('--accent',        a.color);
-        document.documentElement.style.setProperty('--accent-hover',  a.color);
-        document.documentElement.style.setProperty('--accent-light',  a.bgLight);
-        document.documentElement.style.setProperty('--accent-border', a.border);
-    }
     if (avatar) applyAvatar(avatar);
     if (title)  document.title = title;
 }
@@ -1495,6 +1835,857 @@ function restoreAppearance() {
 // ============================================================
 
 // REF-APP-63
-function dangerResetConfig()   { if (confirm('Reset ALL config? Cannot be undone.'))   toast('Coming soon', 'error'); }
-function dangerClearLogs()     { if (confirm('Clear ALL mod logs? Cannot be undone.')) toast('Coming soon', 'error'); }
-function dangerClearWarnings() { if (confirm('Clear ALL warnings? Cannot be undone.')) toast('Coming soon', 'error'); }
+async function exportData() {
+    if (!State.guildId) { toast('No server selected', 'error'); return; }
+    try {
+        const data = await apiGet(`/api/export/${State.guildId}`);
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = `penny-export-${State.guildId}-${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast('Export downloaded');
+    } catch(e) { toast('Export failed', 'error'); }
+}
+
+async function dangerClear(type, label) {
+    if (!State.guildId) { toast('No server selected', 'error'); return; }
+    openModal(`Clear ${label}`, `
+        <div style="font-size:13px;color:var(--text2);line-height:1.6">
+            Are you sure you want to permanently delete all <strong>${label}</strong> for this server?
+            <br><br>
+            <span style="color:var(--red);font-weight:600">This cannot be undone.</span>
+        </div>
+    `, [
+        { label: 'Cancel',            class: 'btn-secondary', action: 'closeModal()' },
+        { label: `Clear ${label}`,    class: 'btn-danger',    action: `confirmDangerClear('${type}','${label}')` },
+    ]);
+}
+
+async function confirmDangerClear(type, label) {
+    if (!State.guildId) return;
+    try {
+        await apiDelete(`/api/data/${type}/${State.guildId}`);
+        closeModal();
+        toast(`${label} cleared`);
+    } catch(e) { toast('Failed', 'error'); }
+}
+
+// ============================================================
+// COLLAPSIBLE NAV GROUPS
+// REF-APP-67
+// ============================================================
+
+// Map each section to its group
+const SECTION_GROUP = {
+    security:     'security',
+    secoverview:  'security',
+    secspam:      'security',
+    secraid:      'security',
+    secbadwords:  'security',
+    seccaps:      'security',
+    secmention:   'security',
+    secinvite:    'security',
+    secage:       'security',
+    secphishing:  'security',
+    secantilink:  'security',
+    secrepeat:    'security',
+    secemoji:     'security',
+    secnewline:   'security',
+    seczalgo:     'security',
+    sechoist:     'security',
+    antinuke:     'security',
+    verification: 'security',
+    joingate:     'security',
+    modlog:       'moderation',
+    warnings:     'moderation',
+    punishments:  'moderation',
+    exemptions:   'moderation',
+    auditlog:     'audit',
+    auditconfig:  'audit',
+    leveling:     'community',
+    reactionroles:'community',
+    giveaways:    'community',
+    polls:        'community',
+    tickets:      'community',
+    commands:     'automation',
+    autoresponder:'automation',
+    scheduled:    'automation',
+    reminders:    'automation',
+    afk:          'automation',
+    socials:      'automation',
+    welcome:      'configuration',
+    users:        'configuration',
+    settings:     'configuration',
+};
+
+const ALL_GROUPS = ['security','moderation','audit','community','automation','configuration'];
+
+function toggleGroup(group) {
+    const isOpen = document.getElementById(`children-${group}`).classList.contains('open');
+
+    // Close all groups first
+    ALL_GROUPS.forEach(g => {
+        document.getElementById(`children-${g}`)?.classList.remove('open');
+        document.getElementById(`chevron-${g}`)?.classList.remove('open');
+        document.getElementById(`group-${g}`)?.querySelector('.nav-group-header')?.classList.remove('open');
+    });
+
+    // If it wasn't open, open it
+    if (!isOpen) {
+        document.getElementById(`children-${group}`)?.classList.add('open');
+        document.getElementById(`chevron-${group}`)?.classList.add('open');
+        document.getElementById(`group-${group}`)?.querySelector('.nav-group-header')?.classList.add('open');
+    }
+}
+
+function openGroupForSection(section) {
+    const group = SECTION_GROUP[section];
+    if (!group) return;
+    ALL_GROUPS.forEach(g => {
+        document.getElementById(`children-${g}`)?.classList.remove('open');
+        document.getElementById(`chevron-${g}`)?.classList.remove('open');
+        document.getElementById(`group-${g}`)?.querySelector('.nav-group-header')?.classList.remove('open');
+    });
+    document.getElementById(`children-${group}`)?.classList.add('open');
+    document.getElementById(`chevron-${group}`)?.classList.add('open');
+    document.getElementById(`group-${group}`)?.querySelector('.nav-group-header')?.classList.add('open');
+}
+
+// ============================================================
+// MOBILE SIDEBAR
+// REF-APP-68
+// ============================================================
+
+function toggleMobileSidebar() {
+    const sidebar  = document.querySelector('.sidebar');
+    const overlay  = document.getElementById('sidebar-overlay');
+    const isOpen   = sidebar.classList.contains('mobile-open');
+    if (isOpen) {
+        closeMobileSidebar();
+    } else {
+        sidebar.classList.add('mobile-open');
+        overlay.classList.add('visible');
+    }
+}
+
+function closeMobileSidebar() {
+    document.querySelector('.sidebar')?.classList.remove('mobile-open');
+    document.getElementById('sidebar-overlay')?.classList.remove('visible');
+}
+
+// ============================================================
+// MODAL SYSTEM
+// REF-APP-70
+// ============================================================
+
+function openModal(title, bodyHtml, buttons) {
+    document.getElementById('modal-title').textContent  = title;
+    document.getElementById('modal-body').innerHTML     = bodyHtml;
+    document.getElementById('modal-footer').innerHTML   = buttons.map(b =>
+        `<button class="${b.class || 'btn-secondary'}" onclick="${b.action}">${b.label}</button>`
+    ).join('');
+    document.getElementById('modal-overlay').classList.remove('hidden');
+}
+
+function closeModal() {
+    document.getElementById('modal-overlay').classList.add('hidden');
+    document.getElementById('modal-body').innerHTML   = '';
+    document.getElementById('modal-footer').innerHTML = '';
+}
+
+function handleModalOverlayClick(e) {
+    if (e.target === document.getElementById('modal-overlay')) closeModal();
+}
+
+
+// ============================================================
+// USER MODALS
+// REF-APP-71
+// ============================================================
+
+function openCreateUserModal() {
+    openModal('Create Admin User', `
+        <div class="modal-field">
+            <label class="modal-label">Username</label>
+            <input class="modal-input" id="m-new-username" placeholder="Username">
+        </div>
+        <div class="modal-field">
+            <label class="modal-label">Password</label>
+            <input class="modal-input" type="password" id="m-new-password" placeholder="Min 8 characters">
+        </div>
+        <div class="modal-field">
+            <label class="modal-label">Discord ID <span style="font-weight:400;color:var(--text3)">(optional)</span></label>
+            <input class="modal-input" id="m-new-discord" placeholder="Discord user ID">
+        </div>
+        <div class="modal-error" id="m-create-error"></div>
+    `, [
+        { label: 'Cancel',      class: 'btn-secondary', action: 'closeModal()' },
+        { label: 'Create User', class: 'btn-primary',   action: 'submitCreateUser()' },
+    ]);
+}
+
+async function submitCreateUser() {
+    const username   = document.getElementById('m-new-username').value.trim();
+    const password   = document.getElementById('m-new-password').value;
+    const discord_id = document.getElementById('m-new-discord').value.trim();
+    const errorEl    = document.getElementById('m-create-error');
+
+    errorEl.classList.remove('visible');
+
+    if (!username || !password) {
+        errorEl.textContent = 'Username and password are required.';
+        errorEl.classList.add('visible');
+        return;
+    }
+    if (password.length < 8) {
+        errorEl.textContent = 'Password must be at least 8 characters.';
+        errorEl.classList.add('visible');
+        return;
+    }
+
+    try {
+        const res  = await fetch(`${window.PENNY_API_URL}/auth/users`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
+            body:    JSON.stringify({ username, password, discord_id: discord_id || undefined }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            errorEl.textContent = data.error || 'Failed to create user.';
+            errorEl.classList.add('visible');
+            return;
+        }
+        closeModal();
+        toast(`${username} created`);
+        loadUsers();
+    } catch(e) { toast('Failed', 'error'); }
+}
+
+function openEditUserModal(id, username, discordId) {
+    openModal(`Edit User — ${username}`, `
+        <div class="modal-field">
+            <label class="modal-label">Username</label>
+            <input class="modal-input" id="m-edit-username" placeholder="Leave blank to keep current" value="">
+        </div>
+        <div class="modal-field">
+            <label class="modal-label">Password</label>
+            <input class="modal-input" type="password" id="m-edit-password" placeholder="Leave blank to keep current">
+        </div>
+        <div class="modal-field">
+            <label class="modal-label">Discord ID</label>
+            <input class="modal-input" id="m-edit-discord" placeholder="Discord user ID" value="${discordId || ''}">
+        </div>
+        <div class="modal-error" id="m-edit-error"></div>
+    `, [
+        { label: 'Cancel',       class: 'btn-secondary', action: 'closeModal()' },
+        { label: 'Save Changes', class: 'btn-primary',   action: `submitEditUserModal(${id})` },
+    ]);
+}
+
+async function submitEditUserModal(id) {
+    const username   = document.getElementById('m-edit-username').value.trim();
+    const password   = document.getElementById('m-edit-password').value;
+    const discord_id = document.getElementById('m-edit-discord').value.trim();
+    const errorEl    = document.getElementById('m-edit-error');
+
+    errorEl.classList.remove('visible');
+
+    const body = {};
+    if (username) body.username   = username;
+    if (password) {
+        if (password.length < 8) {
+            errorEl.textContent = 'Password must be at least 8 characters.';
+            errorEl.classList.add('visible');
+            return;
+        }
+        body.password = password;
+    }
+    body.discord_id = discord_id || null;
+
+    try {
+        const res  = await fetch(`${window.PENNY_API_URL}/auth/users/${id}`, {
+            method:  'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
+            body:    JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            errorEl.textContent = data.error || 'Failed.';
+            errorEl.classList.add('visible');
+            return;
+        }
+        closeModal();
+        toast('User updated');
+        loadUsers();
+    } catch(e) { toast('Failed', 'error'); }
+}
+
+function openEditMyProfileModal() {
+    openModal('My Profile', `
+        <div class="modal-field">
+            <label class="modal-label">Username</label>
+            <input class="modal-input" id="m-me-username" placeholder="Leave blank to keep current">
+        </div>
+        <div class="modal-field">
+            <label class="modal-label">New Password</label>
+            <input class="modal-input" type="password" id="m-me-password" placeholder="Leave blank to keep current">
+        </div>
+        <div class="modal-field">
+            <label class="modal-label">Discord ID</label>
+            <input class="modal-input" id="m-me-discord" value="${State.user?.discord_id || ''}" placeholder="Discord user ID">
+        </div>
+        <div class="modal-error" id="m-me-error"></div>
+    `, [
+        { label: 'Cancel',   class: 'btn-secondary', action: 'closeModal()' },
+        { label: 'Save',     class: 'btn-primary',   action: 'submitMyProfile()' },
+    ]);
+}
+
+async function submitMyProfile() {
+    const username   = document.getElementById('m-me-username').value.trim();
+    const password   = document.getElementById('m-me-password').value;
+    const discord_id = document.getElementById('m-me-discord').value.trim();
+    const errorEl    = document.getElementById('m-me-error');
+
+    errorEl.classList.remove('visible');
+
+    const body = {};
+    if (username) body.username = username;
+    if (password) {
+        if (password.length < 8) {
+            errorEl.textContent = 'Password must be at least 8 characters.';
+            errorEl.classList.add('visible');
+            return;
+        }
+        body.password = password;
+    }
+    body.discord_id = discord_id || null;
+
+    try {
+        const res  = await fetch(`${window.PENNY_API_URL}/auth/me`, {
+            method:  'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
+            body:    JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            errorEl.textContent = data.error || 'Failed.';
+            errorEl.classList.add('visible');
+            return;
+        }
+        if (data.user) {
+            State.user = { ...State.user, ...data.user };
+            localStorage.setItem('penny_user', JSON.stringify(State.user));
+            document.getElementById('sb-user-name').textContent = State.user.username;
+        }
+        closeModal();
+        toast('Profile saved');
+        loadUsers();
+    } catch(e) { toast('Failed', 'error'); }
+}
+
+// ============================================================
+// SECURITY MODULE PAGES
+// REF-APP-72
+// ============================================================
+
+// === SHARED HELPERS ===
+
+function secActionSelect(key, currentValue) {
+    const val = currentValue || 'ladder';
+    return `
+        <select class="settings-input" id="${key}" style="width:200px">
+            <option value="ladder"      ${val==='ladder'      ? 'selected':''}>Use Punishment Ladder</option>
+            <option value="delete"      ${val==='delete'      ? 'selected':''}>Delete Only</option>
+            <option value="delete_warn" ${val==='delete_warn' ? 'selected':''}>Delete + Warn (feeds ladder)</option>
+            <option value="kick"        ${val==='kick'        ? 'selected':''}>Kick</option>
+            <option value="ban"         ${val==='ban'         ? 'selected':''}>Ban</option>
+        </select>`;
+}
+
+function secModuleCard(title, desc, enabledKey, actionKey, thresholds, extra) {
+    const c = State.config;
+    return `
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <div class="card-title">${title}</div>
+                    <div class="card-desc">${desc}</div>
+                </div>
+                <label class="toggle">
+                    <input type="checkbox" id="${enabledKey}" ${c[enabledKey] ? 'checked' : ''} onchange="saveSecToggle('${enabledKey}', this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            ${actionKey ? `
+            <div class="settings-row">
+                <div>
+                    <div class="settings-label">Action</div>
+                    <div style="font-size:12px;color:var(--text3)">What Penny does when this module triggers</div>
+                </div>
+                ${secActionSelect(actionKey, c[actionKey])}
+            </div>` : ''}
+            ${thresholds || ''}
+            ${extra || ''}
+            <div class="card-footer">
+                <button class="btn-primary" onclick="saveSecModule('${enabledKey}', ${actionKey ? `'${actionKey}'` : 'null'}, ${JSON.stringify((thresholds||'').match(/data-key="([^"]+)"/g)?.map(k=>k.replace(/data-key="|"/g,''))||[])})">Save</button>
+            </div>
+        </div>`;
+}
+
+async function saveSecToggle(key, value) {
+    if (!State.guildId) { toast('No server selected', 'error'); return; }
+    try {
+        await apiPatch(`/api/config/${State.guildId}`, { key, value });
+        State.config[key] = value;
+        toast(value ? 'Enabled' : 'Disabled');
+    } catch(e) { toast('Failed', 'error'); }
+}
+
+async function saveSecModule(enabledKey, actionKey, thresholdKeys) {
+    if (!State.guildId) { toast('No server selected', 'error'); return; }
+    const updates = {};
+    updates[enabledKey] = document.getElementById(enabledKey)?.checked || false;
+    if (actionKey) {
+        updates[actionKey] = document.getElementById(actionKey)?.value || 'ladder';
+    }
+    if (thresholdKeys && thresholdKeys.length) {
+        thresholdKeys.forEach(k => {
+            const el = document.querySelector(`[data-key="${k}"]`);
+            if (el) updates[k] = parseFloat(el.value);
+        });
+    }
+    try {
+        await apiPut(`/api/config/${State.guildId}`, updates);
+        Object.assign(State.config, updates);
+        toast('Saved');
+    } catch(e) { toast('Failed', 'error'); }
+}
+
+
+// === SECURITY OVERVIEW ===
+// REF-APP-72a
+function renderSecOverview() {
+    const el = document.getElementById('content');
+    const c  = State.config;
+
+    const modules = [
+        { key: 'spam_enabled',         name: 'Spam Detection',    section: 'secspam',     desc: 'Message rate limiting'          },
+        { key: 'raid_enabled',         name: 'Anti-Raid',         section: 'secraid',     desc: 'Mass join detection'            },
+        { key: 'badwords_enabled',     name: 'Bad Word Filter',   section: 'secbadwords', desc: 'Prohibited word detection'      },
+        { key: 'caps_enabled',         name: 'Caps Filter',       section: 'seccaps',     desc: 'Excessive caps detection'       },
+        { key: 'mass_mention_enabled', name: 'Mass Mention',      section: 'secmention',  desc: 'Mention spam detection'         },
+        { key: 'antilink_enabled',     name: 'Anti-Invite Links', section: 'secinvite',   desc: 'Discord invite link blocking'   },
+        { key: 'antilink_all_enabled', name: 'Anti-Link',         section: 'secantilink', desc: 'All URL blocking'               },
+        { key: 'accountage_enabled',   name: 'Account Age Gate',  section: 'secage',      desc: 'New account filtering'         },
+        { key: 'antiphishing_enabled', name: 'Anti-Phishing',     section: 'secphishing', desc: 'Phishing link detection'        },
+        { key: 'repeat_enabled',       name: 'Repeated Text',     section: 'secrepeat',   desc: 'Copypasta detection'            },
+        { key: 'emojispam_enabled',    name: 'Emoji Spam',        section: 'secemoji',    desc: 'Emoji spam detection'           },
+        { key: 'newline_enabled',      name: 'Newline Spam',      section: 'secnewline',  desc: 'Line break spam detection'      },
+        { key: 'zalgo_enabled',        name: 'Zalgo Text',        section: 'seczalgo',    desc: 'Corrupted text detection'       },
+        { key: 'antihoist_enabled',    name: 'Anti-Hoist',        section: 'sechoist',    desc: 'Username hoist prevention'      },
+    ];
+
+    const active  = modules.filter(m => c[m.key]).length;
+    const total   = modules.length;
+
+    el.innerHTML = `
+        <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
+            <div class="stat-card blue">
+                <div class="stat-label">Active Modules</div>
+                <div class="stat-value">${active}<span style="font-size:14px;color:var(--text2)">/${total}</span></div>
+            </div>
+            <div class="stat-card green">
+                <div class="stat-label">Modules Off</div>
+                <div class="stat-value">${total - active}</div>
+            </div>
+            <div class="stat-card ${active === total ? 'green' : active > total / 2 ? 'gold' : 'red'}">
+                <div class="stat-label">Coverage</div>
+                <div class="stat-value">${Math.round((active / total) * 100)}%</div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><div class="card-title">All Modules</div><div class="card-desc">Click any module to configure it</div></div>
+            ${modules.map(m => `
+                <div class="toggle-row" style="cursor:pointer" onclick="setSection('${m.section}')">
+                    <div class="toggle-info">
+                        <div class="toggle-name">${m.name}</div>
+                        <div style="font-size:11px;color:var(--text3);margin-top:2px">${m.desc}</div>
+                    </div>
+                    <div class="toggle-right">
+                        <span class="ms-badge ${c[m.key] ? 'ms-on' : 'ms-off'}">${c[m.key] ? 'Active' : 'Off'}</span>
+                        <span style="font-size:12px;color:var(--text3)">→</span>
+                    </div>
+                </div>`).join('')}
+        </div>`;
+}
+
+
+// === SPAM DETECTION ===
+// REF-APP-72b
+function renderSecSpam(tab) {
+    if (tab === 'Exemptions') { renderModuleExemptionsTab('spam'); return; }
+    const c = State.config;
+    document.getElementById('content').innerHTML = secModuleCard(
+        'Spam Detection',
+        'Detects users sending too many messages in a short window',
+        'spam_enabled',
+        'spam_action',
+        `<div class="settings-row">
+            <div class="settings-label">Max messages</div>
+            <input class="thr-input" type="number" value="${c.spam_max_messages || 5}" data-key="spam_max_messages">
+            <div class="thr-unit">messages</div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">Time window</div>
+            <input class="thr-input" type="number" value="${c.spam_window_ms || 5000}" data-key="spam_window_ms">
+            <div class="thr-unit">ms</div>
+        </div>`
+    );
+}
+
+
+// === ANTI-RAID ===
+// REF-APP-72c
+function renderSecRaid(tab) {
+    if (tab === 'Exemptions') { renderModuleExemptionsTab('raid'); return; }
+    const c = State.config;
+    document.getElementById('content').innerHTML = secModuleCard(
+        'Anti-Raid',
+        'Triggers when too many users join the server in a short window',
+        'raid_enabled',
+        'raid_action',
+        `<div class="settings-row">
+            <div class="settings-label">Max joins</div>
+            <input class="thr-input" type="number" value="${c.raid_max_joins || 5}" data-key="raid_max_joins">
+            <div class="thr-unit">joins</div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">Time window</div>
+            <input class="thr-input" type="number" value="${c.raid_window_ms || 10000}" data-key="raid_window_ms">
+            <div class="thr-unit">ms</div>
+        </div>`
+    );
+}
+
+
+// === BAD WORD FILTER ===
+// REF-APP-72d
+    function renderSecBadWords(tab) {
+    if (tab === 'Exemptions') { renderModuleExemptionsTab('badwords'); return; }
+    const c = State.config;
+
+    if (tab === 'Settings') {
+        document.getElementById('content').innerHTML = secModuleCard(
+            'Bad Word Filter',
+            'Detects and acts on messages containing prohibited words',
+            'badwords_enabled',
+            'badwords_action',
+            null
+        );
+    }
+
+    if (tab === 'Word List') {
+        const words = c.badwords_list || [];
+        document.getElementById('content').innerHTML = `
+            <div class="card">
+                <div class="card-header"><div class="card-title">Word List</div></div>
+                <div class="word-grid" id="word-grid">
+                    ${words.map(w => wordTag(w)).join('') || '<span style="color:var(--text3);font-size:13px;padding:4px">No words added</span>'}
+                </div>
+                <div class="word-add">
+                    <input class="word-input" id="word-input" placeholder="Add a word...">
+                    <button class="add-btn" onclick="addBadWord()">Add</button>
+                </div>
+            </div>`;
+    }
+}
+
+
+// === CAPS FILTER ===
+// REF-APP-72e
+function renderSecCaps(tab) {
+    if (tab === 'Exemptions') { renderModuleExemptionsTab('caps'); return; }
+    const c = State.config;
+    document.getElementById('content').innerHTML = secModuleCard(
+        'Caps Filter',
+        'Detects messages with excessive capital letters',
+        'caps_enabled',
+        'caps_action',
+        `<div class="settings-row">
+            <div class="settings-label">Caps threshold</div>
+            <input class="thr-input" type="number" value="${c.caps_threshold || 0.7}" data-key="caps_threshold" step="0.1" min="0.1" max="1">
+            <div class="thr-unit">ratio (0.7 = 70%)</div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">Minimum length</div>
+            <input class="thr-input" type="number" value="${c.caps_min_length || 10}" data-key="caps_min_length">
+            <div class="thr-unit">chars</div>
+        </div>`
+    );
+}
+
+
+// === MASS MENTION ===
+// REF-APP-72f
+function renderSecMention(tab) {
+    if (tab === 'Exemptions') { renderModuleExemptionsTab('mass_mention'); return; }
+    const c = State.config;
+    document.getElementById('content').innerHTML = secModuleCard(
+        'Mass Mention',
+        'Detects messages that mention too many users or roles at once',
+        'mass_mention_enabled',
+        'mass_mention_action',
+        `<div class="settings-row">
+            <div class="settings-label">Max mentions</div>
+            <input class="thr-input" type="number" value="${c.mass_mention_max || 5}" data-key="mass_mention_max">
+            <div class="thr-unit">mentions</div>
+        </div>`
+    );
+}
+
+
+// === ANTI-INVITE LINKS ===
+// REF-APP-72g
+function renderSecInvite(tab) {
+    if (tab === 'Exemptions') { renderModuleExemptionsTab('antilink'); return; }
+    document.getElementById('content').innerHTML = secModuleCard(
+        'Anti-Invite Links',
+        'Detects and acts on Discord invite links posted in the server',
+        'antilink_enabled',
+        'antilink_action',
+        null
+    );
+}
+
+
+// === ACCOUNT AGE GATE ===
+// REF-APP-72h
+function renderSecAge(tab) {
+    if (tab === 'Exemptions') { renderModuleExemptionsTab('accountage'); return; }
+    const c = State.config;
+    document.getElementById('content').innerHTML = secModuleCard(
+        'Account Age Gate',
+        'Kicks new members whose Discord account is too new',
+        'accountage_enabled',
+        null,
+        `<div class="settings-row">
+            <div class="settings-label">Minimum account age</div>
+            <input class="thr-input" type="number" value="${c.accountage_min_days || 7}" data-key="accountage_min_days">
+            <div class="thr-unit">days</div>
+        </div>`
+    );
+}
+
+// ============================================================
+// MODULE EXEMPTIONS UI
+// REF-APP-73
+// ============================================================
+
+function moduleExemptionsCard(module) {
+    return `
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <div class="card-title">Exemptions</div>
+                    <div class="card-desc">Roles, users and channels exempt from this module only</div>
+                </div>
+            </div>
+            <div style="padding:14px 18px;display:flex;gap:10px;border-bottom:1px solid var(--border)">
+                <select class="settings-input" id="me-type-${module}" style="width:120px">
+                    <option value="role">Role</option>
+                    <option value="user">User</option>
+                    <option value="channel">Channel</option>
+                </select>
+                <input class="settings-input" id="me-id-${module}" placeholder="Enter ID" style="flex:1">
+                <button class="add-btn" onclick="addModuleExemption('${module}')">Add</button>
+            </div>
+            <div id="me-list-${module}" style="padding:10px 18px">
+                <div class="empty-state" style="padding:16px"><div class="empty-state-title">Loading...</div></div>
+            </div>
+        </div>`;
+}
+
+async function loadModuleExemptions(module) {
+    if (!State.guildId) return;
+    try {
+        const data = await apiGet(`/api/module-exemptions/${State.guildId}/${module}`);
+        const el   = document.getElementById(`me-list-${module}`);
+        const all  = [
+            ...data.roles.map(id    => ({ id, type: 'role',    label: `Role: ${id}`    })),
+            ...data.users.map(id    => ({ id, type: 'user',    label: `User: ${id}`    })),
+            ...data.channels.map(id => ({ id, type: 'channel', label: `Channel: ${id}` })),
+        ];
+        if (!all.length) {
+            el.innerHTML = `<div class="empty-state" style="padding:16px"><div class="empty-state-title">No exemptions added</div></div>`;
+            return;
+        }
+        el.innerHTML = all.map(e => `
+            <div class="exempt-item">
+                <span class="exempt-name">${e.label}</span>
+                <button class="exempt-remove" onclick="removeModuleExemption('${module}','${e.type}','${e.id}')">Remove</button>
+            </div>`).join('');
+    } catch(e) { console.error(e); }
+}
+
+async function addModuleExemption(module) {
+    if (!State.guildId) { toast('No server selected', 'error'); return; }
+    const type      = document.getElementById(`me-type-${module}`).value;
+    const target_id = document.getElementById(`me-id-${module}`).value.trim();
+    if (!target_id) { toast('Enter an ID', 'error'); return; }
+    try {
+        await apiPost(`/api/module-exemptions/${State.guildId}/${module}`, {
+            type, target_id, added_by: State.user?.username
+        });
+        document.getElementById(`me-id-${module}`).value = '';
+        toast('Exemption added');
+        loadModuleExemptions(module);
+    } catch(e) { toast('Failed', 'error'); }
+}
+
+async function removeModuleExemption(module, type, targetId) {
+    if (!State.guildId) return;
+    try {
+        await apiDelete(`/api/module-exemptions/${State.guildId}/${module}`, {
+            type, target_id: targetId
+        });
+toast('Removed');
+        loadModuleExemptions(module);
+    } catch(e) { toast('Failed', 'error'); }
+}
+
+// === ANTI-LINK ===
+// REF-APP-72i
+function renderSecAntiLink(tab) {
+    if (tab === 'Exemptions') { renderModuleExemptionsTab('antilink_all'); return; }
+    document.getElementById('content').innerHTML = secModuleCard(
+        'Anti-Link',
+        'Blocks all URLs posted in the server (not just Discord invites)',
+        'antilink_all_enabled',
+        'antilink_all_action',
+        null
+    );
+}
+
+// === REPEATED TEXT ===
+// REF-APP-72j
+function renderSecRepeat(tab) {
+    if (tab === 'Exemptions') { renderModuleExemptionsTab('repeat'); return; }
+    const c = State.config;
+    document.getElementById('content').innerHTML = secModuleCard(
+        'Repeated Text',
+        'Detects copypasta and messages with excessive repeated words',
+        'repeat_enabled',
+        'repeat_action',
+        `<div class="settings-row">
+            <div class="settings-label">Minimum length</div>
+            <input class="thr-input" type="number" value="${c.repeat_min_length || 20}" data-key="repeat_min_length">
+            <div class="thr-unit">chars</div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">Repeat threshold</div>
+            <input class="thr-input" type="number" value="${c.repeat_threshold || 0.7}" data-key="repeat_threshold" step="0.1" min="0.1" max="1">
+            <div class="thr-unit">ratio</div>
+        </div>`
+    );
+}
+
+// === EMOJI SPAM ===
+// REF-APP-72k
+function renderSecEmoji(tab) {
+    if (tab === 'Exemptions') { renderModuleExemptionsTab('emojispam'); return; }
+    const c = State.config;
+    document.getElementById('content').innerHTML = secModuleCard(
+        'Emoji Spam',
+        'Detects messages containing too many emojis',
+        'emojispam_enabled',
+        'emojispam_action',
+        `<div class="settings-row">
+            <div class="settings-label">Max emojis</div>
+            <input class="thr-input" type="number" value="${c.emojispam_max || 5}" data-key="emojispam_max">
+            <div class="thr-unit">emojis</div>
+        </div>`
+    );
+}
+
+// === NEWLINE SPAM ===
+// REF-APP-72l
+function renderSecNewline(tab) {
+    if (tab === 'Exemptions') { renderModuleExemptionsTab('newline'); return; }
+    const c = State.config;
+    document.getElementById('content').innerHTML = secModuleCard(
+        'Newline Spam',
+        'Detects messages with excessive line breaks',
+        'newline_enabled',
+        'newline_action',
+        `<div class="settings-row">
+            <div class="settings-label">Max lines</div>
+            <input class="thr-input" type="number" value="${c.newline_max || 10}" data-key="newline_max">
+            <div class="thr-unit">lines</div>
+        </div>`
+    );
+}
+
+// === ZALGO TEXT ===
+// REF-APP-72m
+function renderSecZalgo(tab) {
+    if (tab === 'Exemptions') { renderModuleExemptionsTab('zalgo'); return; }
+    document.getElementById('content').innerHTML = secModuleCard(
+        'Zalgo Text',
+        'Detects and removes corrupted or glitched looking text',
+        'zalgo_enabled',
+        'zalgo_action',
+        null
+    );
+}
+
+// === ANTI-HOIST ===
+// REF-APP-72n
+function renderSecHoist(tab) {
+    if (tab === 'Exemptions') { renderModuleExemptionsTab('antihoist'); return; }
+    document.getElementById('content').innerHTML = secModuleCard(
+        'Anti-Hoist',
+        'Renames users whose names start with special characters to prevent them appearing at the top of the member list',
+        'antihoist_enabled',
+        null,
+        null
+    );
+}
+
+// REF-APP-73a
+function renderModuleExemptionsTab(module) {
+    const el = document.getElementById('content');
+    el.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div class="card">
+                <div class="card-header"><div class="card-title">Add Exemption</div></div>
+                <div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+                    <div class="settings-row" style="border:none;padding:0">
+                        <div class="settings-label">Type</div>
+                        <select class="settings-input" id="me-type-${module}" style="width:140px">
+                            <option value="role">Role</option>
+                            <option value="user">User</option>
+                            <option value="channel">Channel</option>
+                        </select>
+                    </div>
+                    <div class="settings-row" style="border:none;padding:0">
+                        <div class="settings-label">ID</div>
+                        <input class="settings-input" id="me-id-${module}" placeholder="Enter role, user or channel ID">
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <button class="btn-primary" onclick="addModuleExemption('${module}')">Add Exemption</button>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header"><div class="card-title">Current Exemptions</div></div>
+                <div id="me-list-${module}">
+                    <div class="empty-state"><div class="empty-state-title">Loading...</div></div>
+                </div>
+            </div>
+        </div>`;
+    loadModuleExemptions(module);
+}

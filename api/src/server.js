@@ -20,6 +20,12 @@ app.use(express.json());
 app.use('/api', require('./routes'));
 app.use('/auth', require('./auth').router);
 
+// REF-SRV-05 — Dynamic client config
+app.get('/client-config.js', (req, res) => {
+    const apiUrl = process.env.PUBLIC_API_URL || `http://localhost:${PORT}`;
+    res.setHeader('Content-Type', 'application/javascript');
+    res.send(`window.PENNY_API_URL = '${apiUrl}';`);
+});
 
 // === 404 HANDLER ===
 // REF-SRV-03

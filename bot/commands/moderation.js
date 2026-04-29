@@ -150,8 +150,44 @@ const commands = [
         .setDescription('View all active bans in this server')
         .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
-];
+    // === TEMPBAN ===
+    new SlashCommandBuilder()
+        .setName('tempban')
+        .setDescription('Temporarily ban a user')
+        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
+        .addUserOption(opt =>
+            opt.setName('user').setDescription('User to tempban').setRequired(true))
+        .addIntegerOption(opt =>
+            opt.setName('duration').setDescription('Duration').setRequired(true))
+        .addStringOption(opt =>
+            opt.setName('unit').setDescription('Unit of time').setRequired(true)
+                .addChoices(
+                    { name: 'Minutes', value: 'minutes' },
+                    { name: 'Hours',   value: 'hours'   },
+                    { name: 'Days',    value: 'days'    },
+                ))
+        .addStringOption(opt =>
+            opt.setName('reason').setDescription('Reason').setRequired(false)),
 
+    // === TEMPMUTE ===
+    new SlashCommandBuilder()
+        .setName('tempmute')
+        .setDescription('Temporarily mute a user')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+        .addUserOption(opt =>
+            opt.setName('user').setDescription('User to tempmute').setRequired(true))
+        .addIntegerOption(opt =>
+            opt.setName('duration').setDescription('Duration').setRequired(true))
+        .addStringOption(opt =>
+            opt.setName('unit').setDescription('Unit of time').setRequired(true)
+                .addChoices(
+                    { name: 'Minutes', value: 'minutes' },
+                    { name: 'Hours',   value: 'hours'   },
+                    { name: 'Days',    value: 'days'    },
+                ))
+        .addStringOption(opt =>
+            opt.setName('reason').setDescription('Reason').setRequired(false)),
+];
 
 // ============================================================
 // COMMAND HANDLERS
@@ -510,6 +546,104 @@ async function logAction(interaction, api, action, user, reason) {
     } catch {}
 }
 
+// REF-CMD-17
+async function handleTempban(interaction, api) {
+    const target   = interaction.options.getMember('user');
+    const duration = interaction.options.getInteger('duration');
+    const unit     = interaction.options.getString('unit') || 'hours';
+    const reason   = interaction.options.getString('reason') || 'No reason provided';
+
+    if (!target)           return interaction.reply({ content: '❌ User not found.', ephemeral: true });
+    if (!target.bannable)  return interaction.reply({ content: '❌ I cannot ban this user.', ephemeral: true });
+
+    const units = { minutes: 60000, hours: 3600000, days: 86400000 };
+    const ms    = duration * (units[unit] || 3600000);
+
+    // DM user before ban
+    await target.send(
+        `🚨 You have been **temporarily banned** from **${interaction.guild.name}**\nDuration: ${duration} ${unit}\nReason: ${reason}`
+    ).catch(() => {});
+
+    await target.ban({ reason, deleteMessageSeconds: 0 });
+
+    // Log to database
+    try {
+        await api.post(`/api/bans/${interaction.guild.id}`, {
+            user_id:   target.id,
+            user_tag:  target.user.tag,
+            reason:    `(Tempban ${duration}${unit[0]}) ${reason}`,
+            banned_by: interaction.user.tag,
+        });
+    } catch {}
+
+    await logAction(interaction, api, 'TEMPBAN', target.user, `${reason} (${duration} ${unit})`);
+
+    // Schedule auto-unban
+    setTimeout(async () => {
+        try {
+            await interaction.guild.members.unban(target.id, 'Tempban expired');
+
+            // Update ban record
+            await api.patch(`/api/bans/${interaction.guild.id}/${target.id}`, {
+                unbanned_by: 'Penny (auto)',
+            }).catch(() => {});
+
+            // Log the unban
+            await api.post(`/api/logs/${interaction.guild.id}`, {
+                action:     'TEMPBAN EXPIRED',
+                target_id:  target.id,
+                target_tag: target.user.tag,
+                moderator:  'Penny',
+                reason:     `Tempban expired (${duration} ${unit})`,
+            }).catch(() => {});
+
+            // DM user
+            await target.send(
+                `✅ Your temporary ban from **${interaction.guild.name}** has expired. You may rejoin.`
+            ).catch(() => {});
+
+        } catch(err) {
+            console.error(`[TEMPBAN] Failed to unban ${target.user.tag}: ${err.message}`);
+        }
+    }, ms);
+
+    await interaction.reply({
+        embeds: [actionEmbed(`⏱ Tempbanned for ${duration} ${unit}`, target.user, reason, interaction.user)],
+        ephemeral: false
+    });
+}
+
+
+// REF-CMD-18
+async function handleTempmute(interaction, api) {
+    const target   = interaction.options.getMember('user');
+    const duration = interaction.options.getInteger('duration');
+    const unit     = interaction.options.getString('unit') || 'minutes';
+    const reason   = interaction.options.getString('reason') || 'No reason provided';
+
+    if (!target)              return interaction.reply({ content: '❌ User not found.', ephemeral: true });
+    if (!target.moderatable)  return interaction.reply({ content: '❌ I cannot mute this user.', ephemeral: true });
+
+    const units = { minutes: 60000, hours: 3600000, days: 86400000 };
+    const ms    = duration * (units[unit] || 60000);
+
+    // Discord timeout max is 28 days
+    const maxMs = 28 * 24 * 60 * 60 * 1000;
+    if (ms > maxMs) return interaction.reply({ content: '❌ Maximum timeout duration is 28 days.', ephemeral: true });
+
+    await target.timeout(ms, reason);
+
+    await target.send(
+        `🔇 You have been **muted** in **${interaction.guild.name}**\nDuration: ${duration} ${unit}\nReason: ${reason}`
+    ).catch(() => {});
+
+    await logAction(interaction, api, 'TEMPMUTE', target.user, `${reason} (${duration} ${unit})`);
+
+    await interaction.reply({
+        embeds: [actionEmbed(`🔇 Muted for ${duration} ${unit}`, target.user, reason, interaction.user)],
+        ephemeral: false
+    });
+}
 
 // ============================================================
 // EXPORTS
@@ -531,4 +665,6 @@ module.exports = {
     handleServerLockdown,
     handleUserinfo,
     handleBans,
+    handleTempban,
+    handleTempmute,
 };

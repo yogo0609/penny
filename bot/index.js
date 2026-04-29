@@ -2,7 +2,7 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, Partials, EmbedBuilder, PermissionsBitField, AuditLogEvent } = require('discord.js');
 const axios = require('axios');
-const { handleBan, handleUnban, handleKick, handleMute, handleUnmute, handleWarn, handleSoftban, handlePurge, handleWarnings, handleClearWarnings, handleLockdown, handleServerLockdown, handleUserinfo, handleBans } = require('./commands/moderation');
+const { handleBan, handleUnban, handleKick, handleMute, handleUnmute, handleWarn, handleSoftban, handlePurge, handleWarnings, handleClearWarnings, handleLockdown, handleServerLockdown, handleUserinfo, handleBans, handleTempban, handleTempmute } = require('./commands/moderation');
 
 
 // === API CLIENT ===
@@ -78,7 +78,30 @@ async function isChannelExempt(guildId, channelId) {
     }
 }
 
+// === MODULE EXEMPTION CHECKER ===
+// REF-BOT-05a
+// Checks module-specific exemptions first, then falls back to global exemptions
+async function isModuleExempt(guildId, module, member, channelId) {
+    try {
+        // Check module-specific exemptions
+        const res     = await api.get(`/api/module-exemptions/${guildId}/${module}`);
+        const { roles, users, channels } = res.data;
 
+        if (users.includes(member.id))                              return true;
+        if (channels.includes(channelId))                           return true;
+        if (member.roles.cache.some(r => roles.includes(r.id)))    return true;
+
+        // Fall back to global exemptions
+        const global = await api.get(`/api/exemptions/${guildId}`);
+        if (global.data.users.includes(member.id))                                  return true;
+        if (global.data.channels.includes(channelId))                               return true;
+        if (member.roles.cache.some(r => global.data.roles.includes(r.id)))        return true;
+
+        return false;
+    } catch {
+        return false;
+    }
+}
 // === SECURITY LOGGER ===
 // REF-BOT-06
 async function log(guild, config, type, description, color = 0xff4444, targetId = null, targetTag = null) {
@@ -114,13 +137,78 @@ async function log(guild, config, type, description, color = 0xff4444, targetId 
     } catch {}
 }
 
+// === MODULE ACTION HANDLER ===
+// REF-BOT-07a
+// Handles the new unified action system (ladder, delete, delete_warn, kick, ban)
+async function handleModuleAction(action, message, member, reason, config) {
+    const act = action || 'ladder';
+
+    // Always delete message for delete, delete_warn and ladder (default)
+    if (act === 'delete' || act === 'delete_warn' || act === 'ladder') {
+        await message.delete().catch(() => {});
+    }
+
+    if (act === 'delete') {
+        // Delete only, no warning
+        await inlineWarn(message, `Your message was removed. Reason: ${reason}`);
+        return;
+    }
+
+    if (act === 'delete_warn' || act === 'ladder') {
+        // Delete + issue warning (feeds punishment ladder)
+        await inlineWarn(message, `Your message was removed. Reason: ${reason}`);
+        await issueWarning(member, reason, config);
+        return;
+    }
+
+    if (act === 'kick') {
+        await message.delete().catch(() => {});
+        await takeAction(member, 'kick', reason, config);
+        return;
+    }
+
+    if (act === 'ban') {
+        await message.delete().catch(() => {});
+        await takeAction(member, 'ban', reason, config);
+        return;
+    }
+}
 
 // === ACTION HANDLER ===
 // REF-BOT-08
 async function takeAction(member, action, reason, config) {
     if (config.test_mode) return;
     try {
-        if (action === 'kick') await member.kick(reason);
+        if (action === 'kick') {
+            // REF-BOT-08a — DM user before kick so they receive the message
+            await member.send(
+                `🚨 You have been **kicked** from **${member.guild.name}**\nReason: ${reason}`
+            ).catch(() => {});
+            await member.kick(reason);
+            // REF-BOT-08b — Log the kick to mod log
+            await api.post(`/api/logs/${member.guild.id}`, {
+                action:     'KICK',
+                target_id:  member.id,
+                target_tag: member.user.tag,
+                moderator:  'Penny',
+                reason:     reason,
+            }).catch(() => {});
+            // REF-BOT-08c — Post to security log channel
+            const kickConfig = await getConfig(member.guild.id);
+            const logChannel = member.guild.channels.cache.get(kickConfig.log_channel_id);
+            if (logChannel) {
+                const { EmbedBuilder } = require('discord.js');
+                const embed = new EmbedBuilder()
+                    .setTitle('👢 Member Kicked')
+                    .setColor(0xff4444)
+                    .addFields(
+                        { name: 'User',   value: member.user.tag, inline: true },
+                        { name: 'Reason', value: reason,          inline: true }
+                    )
+                    .setTimestamp();
+                await logChannel.send({ embeds: [embed] }).catch(() => {});
+            }
+        }
         if (action === 'ban')  await member.ban({ reason, deleteMessageSeconds: 86400 });
         if (action === 'warn') await issueWarning(member, reason, config);
     } catch (err) {
@@ -133,6 +221,7 @@ async function takeAction(member, action, reason, config) {
 // REF-BOT-09
 async function issueWarning(member, reason, config) {
     try {
+        // Save the warning
         await api.post(`/api/warnings/${member.guild.id}`, {
             user_id:   member.id,
             user_tag:  member.user.tag,
@@ -140,17 +229,91 @@ async function issueWarning(member, reason, config) {
             issued_by: 'Penny',
         });
 
-        const res      = await api.get(`/api/warnings/${member.guild.id}/${member.id}`);
-        const count    = res.data.length;
-        const maxWarns = config.max_warnings || 3;
+        // Get current warning count
+        const res   = await api.get(`/api/warnings/${member.guild.id}/${member.id}`);
+        const count = res.data.length;
 
-        await member.send(
-            `⚠️ **Warning ${count}/${maxWarns}** in ${member.guild.name}\nReason: ${reason}`
-        ).catch(() => {});
+        // REF-BOT-09a — Check if a punishment ladder exists for this guild
+        const ladderRes  = await api.get(`/api/ladder/${member.guild.id}`);
+        const ladder     = ladderRes.data;
+        const settingsRes = await api.get(`/api/punishment-settings/${member.guild.id}`);
+        const settings   = settingsRes.data;
 
-        if (count >= maxWarns) {
-            await takeAction(member, 'kick', `Reached ${maxWarns} warnings`, config);
+        if (ladder && ladder.length > 0) {
+            // === USE LADDER ===
+            const step = ladder.find(s => s.step === count);
+
+            // Send DM — use custom message if set, otherwise default
+            const dmMsg = step?.custom_dm ||
+                `⚠️ **Warning ${count}/${ladder[ladder.length - 1].step}** in ${member.guild.name}\nReason: ${reason}`;
+            await member.send(dmMsg).catch(() => {});
+
+            if (step) {
+                const action = step.action;
+
+                if (action === 'mute' && step.duration) {
+                    // Convert duration to ms
+                    const units = { minutes: 60000, hours: 3600000, days: 86400000 };
+                    const ms    = step.duration * (units[step.duration_unit] || 60000);
+                    await member.timeout(ms, reason).catch(() => {});
+                    await api.post(`/api/logs/${member.guild.id}`, {
+                        action: 'MUTE', target_id: member.id, target_tag: member.user.tag,
+                        moderator: 'Penny', reason: `Warning ${count} — ${reason}`,
+                    }).catch(() => {});
+                }
+
+                if (action === 'kick') {
+                    if (settings?.reset_on_kick) {
+                        await api.delete(`/api/warnings/${member.guild.id}/${member.id}`).catch(() => {});
+                    }
+                    await takeAction(member, 'kick', `Warning ${count} — ${reason}`, config);
+                }
+
+                if (action === 'tempban' && step.duration) {
+                    const units = { minutes: 60000, hours: 3600000, days: 86400000 };
+                    const ms    = step.duration * (units[step.duration_unit] || 3600000);
+                    if (settings?.reset_on_ban) {
+                        await api.delete(`/api/warnings/${member.guild.id}/${member.id}`).catch(() => {});
+                    }
+                    await member.send(
+                        `🚨 You have been **temporarily banned** from **${member.guild.name}**\nDuration: ${step.duration} ${step.duration_unit}\nReason: ${reason}`
+                    ).catch(() => {});
+                    await member.ban({ reason, deleteMessageSeconds: 0 });
+                    // Schedule unban
+                    setTimeout(async () => {
+                        await member.guild.members.unban(member.id, 'Tempban expired').catch(() => {});
+                    }, ms);
+                    await api.post(`/api/logs/${member.guild.id}`, {
+                        action: 'TEMPBAN', target_id: member.id, target_tag: member.user.tag,
+                        moderator: 'Penny', reason: `Warning ${count} — ${reason} (${step.duration} ${step.duration_unit})`,
+                    }).catch(() => {});
+                }
+
+                if (action === 'ban') {
+                    if (settings?.reset_on_ban) {
+                        await api.delete(`/api/warnings/${member.guild.id}/${member.id}`).catch(() => {});
+                    }
+                    await takeAction(member, 'ban', `Warning ${count} — ${reason}`, config);
+                }
+
+                if (step.reset_after) {
+                    await api.delete(`/api/warnings/${member.guild.id}/${member.id}`).catch(() => {});
+                }
+            }
+
+        } else {
+            // === FALLBACK — no ladder, use max_warnings ===
+            const maxWarns = config.max_warnings || 3;
+            await member.send(
+                `⚠️ **Warning ${count}/${maxWarns}** in ${member.guild.name}\nReason: ${reason}`
+            ).catch(() => {});
+
+            if (count >= maxWarns) {
+                await api.delete(`/api/warnings/${member.guild.id}/${member.id}`).catch(() => {});
+                await takeAction(member, 'kick', `Reached ${maxWarns} warnings`, config);
+            }
         }
+
     } catch (err) {
         console.error(`[WARN] Failed to issue warning: ${err.message}`);
     }
@@ -233,13 +396,12 @@ client.on('messageCreate', async (message) => {
     const member = message.member
         || await message.guild.members.fetch(message.author.id).catch(() => null);
 
-    if (await isExempt(message.guild.id, member))                    return;
-    if (await isChannelExempt(message.guild.id, message.channel.id)) return;
-
+    // Global admin check still applies to everything
+    if (member?.permissions.has(PermissionsBitField.Flags.Administrator)) return;
 
     // === SPAM DETECTION ===
     // REF-BOT-10
-    if (config.spam_enabled) {
+    if (config.spam_enabled && !await isModuleExempt(message.guild.id, 'spam', member, message.channel.id)) {
         const now    = Date.now();
         const userId = message.author.id;
         const max    = config.spam_max_messages || 5;
@@ -259,15 +421,7 @@ client.on('messageCreate', async (message) => {
             );
 
             if (!config.test_mode) {
-                if (config.spam_action === 'delete') {
-                    const msgs     = await message.channel.messages.fetch({ limit: 20 });
-                    const toDelete = msgs.filter(m => m.author.id === message.author.id);
-                    await message.channel.bulkDelete(toDelete).catch(() => {});
-                    await inlineWarn(message, 'Your messages were removed for spamming.');
-                    await issueWarning(member, 'Spam detected', config);
-                } else {
-                    await takeAction(member, config.spam_action || 'warn', 'Spam detected', config);
-                }
+                await handleModuleAction(config.badwords_action, message, member, `Prohibited word: ${found}`, config);
             }
 
             spamTracker.set(userId, []);
@@ -278,7 +432,7 @@ client.on('messageCreate', async (message) => {
 
     // === BAD WORD FILTER ===
     // REF-BOT-11
-    if (config.badwords_enabled) {
+    if (config.badwords_enabled && !await isModuleExempt(message.guild.id, 'badwords', member, message.channel.id)) {
         const content  = message.content.toLowerCase();
         const wordList = config.badwords_list || [];
         const found    = wordList.find(w => content.includes(w.toLowerCase()));
@@ -290,13 +444,12 @@ client.on('messageCreate', async (message) => {
             );
 
             if (!config.test_mode) {
-                if (config.badwords_action === 'delete') {
-                    await message.delete().catch(() => {});
-                    await inlineWarn(message, 'Your message was removed for containing prohibited content.');
-                    await issueWarning(member, `Prohibited word: ${found}`, config);
-                } else {
-                    await takeAction(member, config.badwords_action || 'warn', `Prohibited word: ${found}`, config);
+                if (config.spam_action === 'delete' || config.spam_action === 'delete_warn' || config.spam_action === 'ladder' || !config.spam_action) {
+                    const msgs     = await message.channel.messages.fetch({ limit: 20 });
+                    const toDelete = msgs.filter(m => m.author.id === message.author.id);
+                    await message.channel.bulkDelete(toDelete).catch(() => {});
                 }
+                await handleModuleAction(config.spam_action, message, member, 'Spam detected', config);
             }
 
             return;
@@ -306,7 +459,7 @@ client.on('messageCreate', async (message) => {
 
     // === CAPS FILTER ===
     // REF-BOT-12
-    if (config.caps_enabled && message.content.length >= (config.caps_min_length || 10)) {
+    if (config.caps_enabled && !await isModuleExempt(message.guild.id, 'caps', member, message.channel.id) && message.content.length >= (config.caps_min_length || 10)) {
         const letters = message.content.replace(/[^a-zA-Z]/g, '');
         if (letters.length > 0) {
             const ratio = (message.content.match(/[A-Z]/g) || []).length / letters.length;
@@ -317,13 +470,7 @@ client.on('messageCreate', async (message) => {
                 );
 
                 if (!config.test_mode) {
-                    if (config.caps_action === 'delete') {
-                        await message.delete().catch(() => {});
-                        await inlineWarn(message, 'Please avoid excessive use of capital letters.');
-                        await issueWarning(member, 'Caps filter triggered', config);
-                    } else {
-                        await takeAction(member, config.caps_action || 'warn', 'Caps filter triggered', config);
-                    }
+                    await handleModuleAction(config.caps_action, message, member, 'Caps filter triggered', config);
                 }
 
                 return;
@@ -334,7 +481,7 @@ client.on('messageCreate', async (message) => {
 
     // === MASS MENTION ===
     // REF-BOT-13
-    if (config.mass_mention_enabled) {
+    if (config.mass_mention_enabled && !await isModuleExempt(message.guild.id, 'mass_mention', member, message.channel.id)) {
         const mentionCount = message.mentions.users.size + message.mentions.roles.size;
         if (mentionCount >= (config.mass_mention_max || 5)) {
             await log(message.guild, config, 'MASS MENTION',
@@ -343,13 +490,7 @@ client.on('messageCreate', async (message) => {
             );
 
             if (!config.test_mode) {
-                if (config.mass_mention_action === 'delete') {
-                    await message.delete().catch(() => {});
-                    await inlineWarn(message, 'Your message was removed for containing too many mentions.');
-                    await issueWarning(member, `Mass mention (${mentionCount})`, config);
-                } else {
-                    await takeAction(member, config.mass_mention_action || 'warn', `Mass mention (${mentionCount})`, config);
-                }
+                await handleModuleAction(config.mass_mention_action, message, member, `Mass mention (${mentionCount})`, config);
             }
 
             return;
@@ -359,7 +500,7 @@ client.on('messageCreate', async (message) => {
 
     // === ANTI INVITE LINK ===
     // REF-BOT-14
-    if (config.antilink_enabled) {
+    if (config.antilink_enabled && !await isModuleExempt(message.guild.id, 'antilink', member, message.channel.id)) {
         const inviteRegex = /(discord\.gg|discord\.com\/invite)\/\S+/i;
         if (inviteRegex.test(message.content)) {
             await log(message.guild, config, 'INVITE LINK',
@@ -368,28 +509,126 @@ client.on('messageCreate', async (message) => {
             );
 
             if (!config.test_mode) {
-                if (config.antilink_action === 'delete') {
-                    await message.delete().catch(() => {});
-                    await inlineWarn(message, 'Posting invite links is not allowed in this server.');
-                    await issueWarning(member, 'Posted invite link', config);
-                } else {
-                    await takeAction(member, config.antilink_action || 'warn', 'Posted invite link', config);
-                }
+                await handleModuleAction(config.antilink_action, message, member, 'Posted invite link', config);
             }
 
             return;
         }
     }
 
+
+    // === ANTI-LINK (all URLs) ===
+    // REF-BOT-14b
+    if (config.antilink_all_enabled && !await isModuleExempt(message.guild.id, 'antilink_all', member, message.channel.id)) {
+        const urlRegex = /https?:\/\/[^\s]+/gi;
+        if (urlRegex.test(message.content)) {
+            await log(message.guild, config, 'LINK DETECTED',
+                `**User:** ${message.author.tag}\n**Channel:** ${message.channel.name}`,
+                0xff4444, message.author.id, message.author.tag
+            );
+            if (!config.test_mode) {
+                await handleModuleAction(config.antilink_all_action, message, member, 'Posted a link', config);
+            }
+            return;
+        }
+    }
+
+
+    // === REPEATED TEXT (copypasta) ===
+    // REF-BOT-14c
+    if (config.repeat_enabled && !await isModuleExempt(message.guild.id, 'repeat', member, message.channel.id)) {
+        const content = message.content.trim();
+        if (content.length >= (config.repeat_min_length || 20)) {
+            const words      = content.split(/\s+/);
+            const unique     = new Set(words.map(w => w.toLowerCase()));
+            const repeatRatio = 1 - (unique.size / words.length);
+            if (repeatRatio >= (config.repeat_threshold || 0.7)) {
+                await log(message.guild, config, 'REPEATED TEXT',
+                    `**User:** ${message.author.tag}\n**Channel:** ${message.channel.name}`,
+                    0xff4444, message.author.id, message.author.tag
+                );
+                if (!config.test_mode) {
+                    await handleModuleAction(config.repeat_action, message, member, 'Repeated text detected', config);
+                }
+                return;
+            }
+        }
+    }
+
+
+    // === EMOJI SPAM ===
+    // REF-BOT-14d
+    if (config.emojispam_enabled && !await isModuleExempt(message.guild.id, 'emojispam', member, message.channel.id)) {
+        const emojiRegex = /(\p{Emoji_Presentation}|\p{Extended_Pictographic})/gu;
+        const emojiCount = (message.content.match(emojiRegex) || []).length;
+        if (emojiCount >= (config.emojispam_max || 5)) {
+            await log(message.guild, config, 'EMOJI SPAM',
+                `**User:** ${message.author.tag}\n**Channel:** ${message.channel.name}\n**Emojis:** ${emojiCount}`,
+                0xff4444, message.author.id, message.author.tag
+            );
+            if (!config.test_mode) {
+                await handleModuleAction(config.emojispam_action, message, member, `Emoji spam (${emojiCount} emojis)`, config);
+            }
+            return;
+        }
+    }
+
+
+    // === NEWLINE SPAM ===
+    // REF-BOT-14e
+    if (config.newline_enabled && !await isModuleExempt(message.guild.id, 'newline', member, message.channel.id)) {
+        const newlineCount = (message.content.match(/\n/g) || []).length;
+        if (newlineCount >= (config.newline_max || 10)) {
+            await log(message.guild, config, 'NEWLINE SPAM',
+                `**User:** ${message.author.tag}\n**Channel:** ${message.channel.name}\n**Lines:** ${newlineCount}`,
+                0xff4444, message.author.id, message.author.tag
+            );
+            if (!config.test_mode) {
+                await handleModuleAction(config.newline_action, message, member, `Newline spam (${newlineCount} lines)`, config);
+            }
+            return;
+        }
+    }
+
+
+    // === ZALGO TEXT ===
+    // REF-BOT-14f
+    if (config.zalgo_enabled && !await isModuleExempt(message.guild.id, 'zalgo', member, message.channel.id)) {
+        const zalgoRegex = /[\u0300-\u036f\u0489\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]{3,}/g;
+        if (zalgoRegex.test(message.content)) {
+            await log(message.guild, config, 'ZALGO TEXT',
+                `**User:** ${message.author.tag}\n**Channel:** ${message.channel.name}`,
+                0xff4444, message.author.id, message.author.tag
+            );
+            if (!config.test_mode) {
+                await handleModuleAction(config.zalgo_action, message, member, 'Zalgo text detected', config);
+            }
+            return;
+        }
+    }
+
 });
-
-
 // ============================================================
 // MEMBER JOIN HANDLER
 // ============================================================
 
 client.on('guildMemberAdd', async (member) => {
     const config = await getConfig(member.guild.id);
+
+    // === ANTI-HOIST ===
+    // REF-BOT-14g
+    if (config.antihoist_enabled) {
+        const hoistRegex = /^[^a-zA-Z0-9]/;
+        const name       = member.displayName;
+        if (hoistRegex.test(name)) {
+            const cleanName = name.replace(/^[^a-zA-Z0-9]+/, '') || 'Member';
+            await member.setNickname(cleanName, 'Anti-hoist').catch(() => {});
+            await log(member.guild, config, 'ANTI-HOIST',
+                `**User:** ${member.user.tag}\n**Original:** ${name}\n**Changed to:** ${cleanName}`,
+                0xffa500, member.id, member.user.tag
+            );
+        }
+    }
 
     // === BOT JOIN DETECTION ===
     // REF-BOT-23
@@ -508,6 +747,8 @@ client.on('interactionCreate', async (interaction) => {
             case 'serverlockdown': await handleServerLockdown(interaction);             break;
             case 'userinfo':       await handleUserinfo(interaction);                   break;
             case 'bans':           await handleBans(interaction, api);                  break;
+            case 'tempban':        await handleTempban(interaction, api);               break;
+            case 'tempmute':       await handleTempmute(interaction, api);
         }
     } catch (err) {
         console.error(`[SLASH] Error handling /${interaction.commandName}:`, err.message);

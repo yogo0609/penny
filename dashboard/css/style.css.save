@@ -132,7 +132,7 @@ body.dark {
     font-family: inherit;
 }
 
-.form-input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-light); background: var(--surface2); color: var(--text); }
+.form-input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-light); }
 
 .form-error {
     background: var(--red-bg);
@@ -640,7 +640,7 @@ input:checked + .slider::before { transform: translateX(18px); }
     font-family: inherit;
 }
 
-.thr-input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-light); background: var(--surface2); color: var(--text); }
+.thr-input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-light); }
 .thr-unit        { font-size: 11px; color: var(--text3); width: 60px; }
 
 /* ============================================================
@@ -735,7 +735,7 @@ input:checked + .slider::before { transform: translateX(18px); }
     font-family: inherit;
 }
 
-.add-input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-light); background: var(--surface); color: var(--text); }
+.add-input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-light); }
 
 /* ============================================================
    SETTINGS ROWS
@@ -767,7 +767,7 @@ input:checked + .slider::before { transform: translateX(18px); }
     font-family: inherit;
 }
 
-.settings-input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-light); background: var(--surface2); color: var(--text); }
+.settings-input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-light); }
 
 /* ============================================================
    BUTTONS
@@ -913,7 +913,7 @@ input:checked + .slider::before { transform: translateX(18px); }
     font-family: inherit;
 }
 
-.word-input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-light); background: var(--surface2); color: var(--text); }
+.word-input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-light); }
 
 /* ============================================================
    APPEARANCE
@@ -1043,85 +1043,15 @@ input:checked + .slider::before { transform: translateX(18px); }
    REF-CSS-29
    ============================================================ */
 
-/* === TABLET === */
 @media (max-width: 900px) {
-    .stats-grid          { grid-template-columns: repeat(2, 1fr); }
-    .sidebar             { width: 180px; min-width: 180px; }
-    .brand-sub           { display: none; }
-    .nav-group-header    { font-size: 9px; }
-    .nav-item            { font-size: 12px; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .sidebar    { width: 180px; min-width: 180px; }
 }
 
-/* === MOBILE === */
-@media (max-width: 640px) {
-    .stats-grid          { grid-template-columns: 1fr; }
-    .content             { padding: 14px; }
-
-    /* Sidebar off-canvas */
-    .sidebar {
-        position: fixed;
-        top: 0;
-        left: 0;
-        height: 100vh;
-        z-index: 1000;
-        transform: translateX(-100%);
-        transition: transform 0.25s ease;
-        width: 220px;
-        min-width: 220px;
-    }
-
-    .sidebar.mobile-open {
-        transform: translateX(0);
-    }
-
-    /* Overlay behind sidebar */
-    .sidebar-overlay {
-        display: none;
-        position: fixed;
-        inset: 0;
-        background: rgba(0,0,0,0.5);
-        z-index: 999;
-    }
-
-    .sidebar-overlay.visible {
-        display: block;
-    }
-
-    /* Hamburger button */
-    .hamburger {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 36px;
-        height: 36px;
-        border: 1px solid var(--border2);
-        border-radius: 8px;
-        background: var(--surface2);
-        cursor: pointer;
-        font-size: 18px;
-        color: var(--text2);
-        flex-shrink: 0;
-    }
-
-    /* Topbar adjustments */
-    .topbar {
-        padding: 0 12px;
-        gap: 8px;
-    }
-
-    .topbar-title { font-size: 14px; }
-
-    /* Hide status pill on mobile to save space */
-    .status-pill { display: none; }
-
-    /* Stack the two-column grid on overview */
-    .overview-grid { grid-template-columns: 1fr !important; }
-}
-
-/* Hide hamburger on desktop/tablet */
-@media (min-width: 641px) {
-    .hamburger        { display: none; }
-    .sidebar-overlay  { display: none !important; }
+@media (max-width: 600px) {
+    .stats-grid { grid-template-columns: 1fr; }
+    .content    { padding: 16px; }
+    .sidebar    { display: none; }
 }
 
 /* ============================================================
@@ -1177,178 +1107,3 @@ input:checked + .slider::before { transform: translateX(18px); }
 
 .nav-chevron.open { transform: rotate(90deg); }
 
-.nav-group-children {
-    display: none;
-    flex-direction: column;
-    gap: 1px;
-    padding-left: 14px;
-    padding-top: 2px;
-    padding-bottom: 6px;
-    background: rgba(0,0,0,0.15);
-    border-radius: 6px;
-    margin: 0 4px;
-}
-
-.nav-group-children.open { display: flex; }
-
-/* ============================================================
-   PUNISHMENT LADDER
-   REF-CSS-31
-   ============================================================ */
-
-.ladder-step {
-    border-bottom: 1px solid var(--border);
-    padding: 16px 18px;
-    display: flex;
-    align-items: flex-start;
-    gap: 16px;
-}
-
-.ladder-step:last-child { border-bottom: none; }
-
-.ladder-step-num {
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--gold);
-    background: var(--gold-light);
-    border: 1px solid var(--gold-border);
-    border-radius: 20px;
-    padding: 4px 12px;
-    white-space: nowrap;
-    flex-shrink: 0;
-    margin-top: 4px;
-}
-
-.ladder-step-body {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.ladder-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.ladder-step-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    flex-shrink: 0;
-}
-
-/* ============================================================
-   MODAL
-   REF-CSS-32
-   ============================================================ */
-
-.modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.6);
-    z-index: 2000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    animation: fadeIn 0.15s ease;
-}
-
-.modal-overlay.hidden { display: none; }
-
-.modal {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    width: 100%;
-    max-width: 480px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
-    animation: slideUp 0.15s ease;
-    overflow: hidden;
-}
-
-.modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border);
-    background: var(--surface2);
-}
-
-.modal-title { font-size: 14px; font-weight: 700; color: var(--text); }
-
-.modal-close {
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    border: 1px solid var(--border2);
-    background: var(--surface);
-    color: var(--text2);
-    font-size: 16px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.15s;
-    font-family: inherit;
-    line-height: 1;
-}
-
-.modal-close:hover { border-color: var(--red); color: var(--red); }
-
-.modal-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
-
-.modal-footer {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    padding: 14px 20px;
-    border-top: 1px solid var(--border);
-    background: var(--surface2);
-}
-
-.modal-field { display: flex; flex-direction: column; gap: 6px; }
-.modal-label { font-size: 13px; font-weight: 600; color: var(--text); }
-.modal-input {
-    background: var(--surface2);
-    border: 1px solid var(--border2);
-    border-radius: var(--radius);
-    color: var(--text);
-    font-size: 13px;
-    padding: 9px 12px;
-    width: 100%;
-    transition: border-color 0.15s;
-    font-family: inherit;
-}
-.modal-input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-light); }
-.modal-error {
-    background: var(--red-bg);
-    border: 1px solid #fecaca;
-    border-radius: var(--radius);
-    color: var(--red);
-    font-size: 12px;
-    padding: 8px 12px;
-    display: none;
-}
-.modal-error.visible { display: block; }
-
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to   { opacity: 1; }
-}
-
-/* === GLOBAL INPUT DARK FIX === */
-/* REF-CSS-33 */
-input, select, textarea {
-    color-scheme: dark;
-}
-
-body:not(.dark) input,
-body:not(.dark) select,
-body:not(.dark) textarea {
-    color-scheme: light;
-}

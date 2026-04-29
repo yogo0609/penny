@@ -7,7 +7,6 @@ const db      = require('./database');
 // === AUTHENTICATION MIDDLEWARE ===
 // REF-RT-01
 function authenticate(req, res, next) {
-    // REF-RT-01a — accept API key (bot) or JWT token (dashboard)
     const apiKey = req.headers['x-api-key'];
     if (apiKey && apiKey === process.env.API_SECRET) {
         return next();
@@ -36,10 +35,8 @@ router.get('/health', (req, res) => {
 });
 
 // REF-RT-02a — Get all guilds Penny is in
-// Populated by the bot on startup and on guild join/leave
 router.get('/guilds', (req, res) => {
-    const guilds = db.getConfig('global', 'guilds', []);
-    res.json(guilds);
+    res.json(db.getGuilds());
 });
 
 // REF-RT-02b — Bot registers its guilds on startup
@@ -48,9 +45,10 @@ router.post('/guilds', (req, res) => {
     if (!guilds || !Array.isArray(guilds)) {
         return res.status(400).json({ error: 'guilds array required' });
     }
-    db.setConfig('global', 'guilds', guilds);
+    db.setGuilds(guilds);
     res.json({ success: true });
 });
+
 
 // === CONFIG ROUTES ===
 
@@ -67,6 +65,12 @@ router.get('/config/:guildId', (req, res) => {
         'caps_enabled', 'caps_min_length', 'caps_threshold', 'caps_action',
         'mass_mention_enabled', 'mass_mention_max', 'mass_mention_action',
         'antilink_enabled', 'antilink_action',
+        'antilink_all_enabled', 'antilink_all_action',
+        'repeat_enabled', 'repeat_action', 'repeat_min_length', 'repeat_threshold',
+        'emojispam_enabled', 'emojispam_action', 'emojispam_max',
+        'newline_enabled', 'newline_action', 'newline_max',
+        'zalgo_enabled', 'zalgo_action',
+        'antihoist_enabled',
         'antiphishing_enabled',
         'accountage_enabled', 'accountage_min_days',
         'welcome_enabled', 'welcome_channel_id', 'welcome_message',
@@ -183,8 +187,8 @@ router.get('/logs/:guildId', (req, res) => {
 
 // REF-RT-09a — Post a mod log entry from the bot
 router.post('/logs/:guildId', (req, res) => {
-    const { guildId }                          = req.params;
-    const { action, target_id, target_tag, moderator, reason } = req.body;
+    const { guildId }                                              = req.params;
+    const { action, target_id, target_tag, moderator, reason }    = req.body;
 
     if (!action) return res.status(400).json({ error: 'action is required' });
 
@@ -232,6 +236,7 @@ router.delete('/warnings/:guildId/:userId', (req, res) => {
     res.json({ success: true });
 });
 
+
 // === BAN ROUTES ===
 
 // REF-RT-13 — Get active bans for a guild
@@ -242,7 +247,7 @@ router.get('/bans/:guildId', (req, res) => {
 
 // REF-RT-14 — Add a ban record
 router.post('/bans/:guildId', (req, res) => {
-    const { guildId }                        = req.params;
+    const { guildId }                              = req.params;
     const { user_id, user_tag, reason, banned_by } = req.body;
 
     if (!user_id || !user_tag || !banned_by) {
@@ -270,6 +275,7 @@ router.get('/bans/:guildId/:userId', (req, res) => {
     res.json(db.getBanHistory(guildId, userId));
 });
 
+
 // === AUDIT LOG ROUTES ===
 
 // REF-RT-17 — Get audit logs for a guild
@@ -282,7 +288,7 @@ router.get('/audit/:guildId', (req, res) => {
 
 // REF-RT-18 — Post an audit log event
 router.post('/audit/:guildId', (req, res) => {
-    const { guildId }                                          = req.params;
+    const { guildId }                                                   = req.params;
     const { event, category, target_id, target_tag, moderator, detail } = req.body;
 
     if (!event || !category) {
@@ -301,7 +307,7 @@ router.get('/audit-config/:guildId', (req, res) => {
 
 // REF-RT-20 — Update audit config for a guild
 router.post('/audit-config/:guildId', (req, res) => {
-    const { guildId }               = req.params;
+    const { guildId }                    = req.params;
     const { event, enabled, channel_id } = req.body;
 
     if (!event || enabled === undefined) {
@@ -309,6 +315,152 @@ router.post('/audit-config/:guildId', (req, res) => {
     }
 
     db.setAuditConfig(guildId, event, enabled, channel_id || null);
+    res.json({ success: true });
+});
+
+// === DATA MANAGEMENT ROUTES ===
+
+// REF-RT-27 — Export all guild data as JSON
+router.get('/export/:guildId', (req, res) => {
+    const { guildId } = req.params;
+    try {
+        const config   = db.db.prepare('SELECT key, value FROM config WHERE guild_id = ?').all(guildId);
+        const modLogs  = db.getModLogs(guildId, 99999);
+        const warnings = db.db.prepare('SELECT * FROM warnings WHERE guild_id = ?').all(guildId);
+        const bans     = db.getActiveBans(guildId);
+        const audit    = db.getAuditLogs(guildId, 99999);
+        const ladder   = db.getLadder(guildId);
+        res.json({
+            guildId,
+            exportedAt: new Date().toISOString(),
+            config,
+            modLogs,
+            warnings,
+            bans,
+            audit,
+            ladder,
+        });
+    } catch(err) {
+        res.status(500).json({ error: 'Export failed' });
+    }
+});
+
+// REF-RT-28 — Clear mod logs
+router.delete('/data/logs/:guildId', (req, res) => {
+    const { guildId } = req.params;
+    db.db.prepare('DELETE FROM mod_log WHERE guild_id = ?').run(guildId);
+    res.json({ success: true });
+});
+
+// REF-RT-29 — Clear audit logs
+router.delete('/data/audit/:guildId', (req, res) => {
+    const { guildId } = req.params;
+    db.db.prepare('DELETE FROM audit_log WHERE guild_id = ?').run(guildId);
+    res.json({ success: true });
+});
+
+// REF-RT-30 — Clear all warnings
+router.delete('/data/warnings/:guildId', (req, res) => {
+    const { guildId } = req.params;
+    db.db.prepare('DELETE FROM warnings WHERE guild_id = ?').run(guildId);
+    res.json({ success: true });
+});
+
+// REF-RT-31 — Clear ban records
+router.delete('/data/bans/:guildId', (req, res) => {
+    const { guildId } = req.params;
+    db.db.prepare('DELETE FROM bans WHERE guild_id = ?').run(guildId);
+    res.json({ success: true });
+});
+
+// REF-RT-32 — Clear punishment ladder
+router.delete('/data/ladder/:guildId', (req, res) => {
+    const { guildId } = req.params;
+    db.clearLadder(guildId);
+    res.json({ success: true });
+});
+
+// === MODULE EXEMPTION ROUTES ===
+
+// REF-RT-33 — Get exemptions for a specific module
+router.get('/module-exemptions/:guildId/:module', (req, res) => {
+    const { guildId, module } = req.params;
+    res.json(db.getModuleExemptions(guildId, module));
+});
+
+// REF-RT-34 — Add a module exemption
+router.post('/module-exemptions/:guildId/:module', (req, res) => {
+    const { guildId, module }          = req.params;
+    const { type, target_id, added_by } = req.body;
+
+    if (!type || !target_id || !added_by) {
+        return res.status(400).json({ error: 'type, target_id and added_by are required' });
+    }
+
+    if (!['role', 'user', 'channel'].includes(type)) {
+        return res.status(400).json({ error: 'type must be role, user or channel' });
+    }
+
+    db.addModuleExemption(guildId, module, type, target_id, added_by);
+    res.json({ success: true });
+});
+
+// REF-RT-35 — Remove a module exemption
+router.delete('/module-exemptions/:guildId/:module', (req, res) => {
+    const { guildId, module }  = req.params;
+    const { type, target_id }  = req.body;
+
+    if (!type || !target_id) {
+        return res.status(400).json({ error: 'type and target_id are required' });
+    }
+
+    db.removeModuleExemption(guildId, module, type, target_id);
+    res.json({ success: true });
+});
+
+// === PUNISHMENT LADDER ROUTES ===
+
+// REF-RT-21 — Get ladder for a guild
+router.get('/ladder/:guildId', (req, res) => {
+    const { guildId } = req.params;
+    res.json(db.getLadder(guildId));
+});
+
+// REF-RT-22 — Set a ladder step
+router.post('/ladder/:guildId', (req, res) => {
+    const { guildId } = req.params;
+    const { step, action, duration, duration_unit, custom_dm, reset_after } = req.body;
+    if (!step || !action) return res.status(400).json({ error: 'step and action required' });
+    db.setLadderStep(guildId, step, action, duration, duration_unit, custom_dm, reset_after);
+    res.json({ success: true });
+});
+
+// REF-RT-23 — Delete a ladder step
+router.delete('/ladder/:guildId/:step', (req, res) => {
+    const { guildId, step } = req.params;
+    db.deleteLadderStep(guildId, parseInt(step));
+    res.json({ success: true });
+});
+
+// REF-RT-24 — Clear entire ladder for a guild
+router.delete('/ladder/:guildId', (req, res) => {
+    const { guildId } = req.params;
+    db.clearLadder(guildId);
+    res.json({ success: true });
+});
+
+// REF-RT-25 — Get punishment settings
+router.get('/punishment-settings/:guildId', (req, res) => {
+    const { guildId } = req.params;
+    const settings = db.getPunishmentSettings(guildId);
+    res.json(settings || { reset_on_kick: 1, reset_on_ban: 1, per_module: 0 });
+});
+
+// REF-RT-26 — Save punishment settings
+router.post('/punishment-settings/:guildId', (req, res) => {
+    const { guildId } = req.params;
+    const { reset_on_kick, reset_on_ban, per_module } = req.body;
+    db.setPunishmentSettings(guildId, reset_on_kick, reset_on_ban, per_module);
     res.json({ success: true });
 });
 
