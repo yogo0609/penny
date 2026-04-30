@@ -660,6 +660,41 @@ function renderSecHoist(tab) {
     );
 }
 
+// REF-SEC-40
+function renderSecAntiNuke(tab) {
+    if (tab === 'Exemptions') { renderModuleExemptionsTab('antinuke'); return; }
+
+    const c = State.config;
+
+    document.getElementById('content').innerHTML = secModuleCard(
+        'Anti-Nuke',
+        'Prevents mass destructive actions like channel or role deletion',
+        'anti_nuke_enabled',
+        'anti_nuke_action',
+        `<div class="toggle-row">
+            <div class="toggle-info">
+                <div class="toggle-name">Threshold</div>
+                <div class="toggle-desc">Actions allowed before triggering</div></span>
+            </div>
+            <div class="toggle-right" style="gap:8px">
+                <input type="number" value="${c.anti_nuke_threshold || 4}" data-key="anti_nuke_threshold" style="width:90px;text-align:right">
+                <span style="font-size:11px;color:var(--text3)"></span>
+            </div>
+        </div>
+        <div class="toggle-row">
+            <div class="toggle-info">
+                <div class="toggle-name">Time Window</div>
+                <div class="toggle-desc">Rolling window in milliseconds</div>
+            </div>
+            <div class="toggle-right" style="gap:8px">
+                <input type="number" value="${c.anti_nuke_window_ms || 10000}" data-key="anti_nuke_window_ms" style="width:90px;text-align:right">
+                <span style="font-size:11px;color:var(--text3)"></span>
+            </div>
+        </div>`,
+        null,
+        'antinuke'
+    );
+}
 
 // ============================================================
 // MODULE EXEMPTIONS

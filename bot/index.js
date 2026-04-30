@@ -34,6 +34,7 @@ const spamTracker    = new Map();
 const raidTracker    = new Map();
 const configCache    = new Map();
 const purgeInitiator = new Map();
+const nukeTracker = new Map();
 
 
 // === CONFIG LOADER ===
@@ -1031,10 +1032,66 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 // REF-BOT-27
 client.on('channelCreate', async (channel) => {
     if (!channel.guild) return;
+
+    let executor = null;
+
+    try {
+        const logs = await channel.guild.fetchAuditLogs({
+            type: AuditLogEvent.ChannelCreate,
+            limit: 1
+        });
+
+        const entry = logs.entries.first();
+
+        if (entry && Date.now() - entry.createdTimestamp < 5000) {
+            executor = entry.executor;
+        }
+    } catch {}
+
     const config = await getConfig(channel.guild.id);
     if (!config.audit_server_channel) return;
+
+    if (executor) {
+        const now = Date.now();
+        const key = `${channel.guild.id}:${executor.id}`;
+
+        if (!nukeTracker.has(key)) nukeTracker.set(key, []);
+        const actions = nukeTracker.get(key);
+
+        actions.push({ time: now, type: 'channelCreate' });
+
+        const window = config.anti_nuke_window_ms || 10000;
+        const recent = actions.filter(a => now - a.time < window);
+
+        nukeTracker.set(key, recent);
+
+        if (recent.length >= (config.anti_nuke_threshold || 4)) {
+            await log(channel.guild, config, 'POTENTIAL NUKE',
+                `**User:** ${executor.tag}\n**Action:** Channel Create\n**Count:** ${recent.length} in ${window/1000}s`,
+                0xff0000, executor.id, executor.tag
+            );
+
+            if (!config.test_mode) {
+                const member = await channel.guild.members.fetch(executor.id).catch(() => null);
+
+                if (member && !await isExempt(channel.guild.id, member)) {
+                    await takeAction(
+                        member,
+                        config.anti_nuke_action || 'ban',
+                        'Anti-nuke: mass channel creation',
+                        config
+                    );
+                }
+            }
+
+            nukeTracker.set(key, []);
+        }
+    }
+
     await audit(channel.guild, 'CHANNEL CREATED', 'server',
-        channel.id, channel.name, null,
+        channel.id,
+        channel.name,
+        executor ? executor.tag : null,
         `Channel: ${channel.name}`,
         0x34d399
     );
@@ -1042,10 +1099,66 @@ client.on('channelCreate', async (channel) => {
 
 client.on('channelDelete', async (channel) => {
     if (!channel.guild) return;
+
+    let executor = null;
+
+    try {
+        const logs = await channel.guild.fetchAuditLogs({
+            type: AuditLogEvent.ChannelDelete,
+            limit: 1
+        });
+
+        const entry = logs.entries.first();
+
+        if (entry && Date.now() - entry.createdTimestamp < 5000) {
+            executor = entry.executor;
+        }
+    } catch {}
+
     const config = await getConfig(channel.guild.id);
     if (!config.audit_server_channel) return;
+
+    if (executor) {
+        const now = Date.now();
+        const key = `${channel.guild.id}:${executor.id}`;
+
+        if (!nukeTracker.has(key)) nukeTracker.set(key, []);
+        const actions = nukeTracker.get(key);
+
+        actions.push({ time: now, type: 'channelDelete' });
+
+        const window = config.anti_nuke_window_ms || 10000;
+        const recent = actions.filter(a => now - a.time < window);
+
+        nukeTracker.set(key, recent);
+
+        if (recent.length >= (config.anti_nuke_threshold || 4)) {
+            await log(channel.guild, config, 'POTENTIAL NUKE',
+                `**User:** ${executor.tag}\n**Action:** Channel Delete\n**Count:** ${recent.length} in ${window/1000}s`,
+                0xff0000, executor.id, executor.tag
+            );
+
+            if (!config.test_mode) {
+                const member = await channel.guild.members.fetch(executor.id).catch(() => null);
+
+                if (member && !await isExempt(channel.guild.id, member)) {
+                    await takeAction(
+                        member,
+                        config.anti_nuke_action || 'ban',
+                        'Anti-nuke: mass channel deletion',
+                        config
+                    );
+                }
+            }
+
+            nukeTracker.set(key, []);
+        }
+    }
+
     await audit(channel.guild, 'CHANNEL DELETED', 'server',
-        channel.id, channel.name, null,
+        channel.id,
+        channel.name,
+        executor ? executor.tag : null,
         `Channel: ${channel.name}`,
         0xff4444
     );
@@ -1075,10 +1188,67 @@ client.on('roleCreate', async (role) => {
 });
 
 client.on('roleDelete', async (role) => {
+    if (!role.guild) return;
+
+    let executor = null;
+
+    try {
+        const logs = await role.guild.fetchAuditLogs({
+            type: AuditLogEvent.RoleDelete,
+            limit: 1
+        });
+
+        const entry = logs.entries.first();
+
+        if (entry && Date.now() - entry.createdTimestamp < 5000) {
+            executor = entry.executor;
+        }
+    } catch {}
+
     const config = await getConfig(role.guild.id);
     if (!config.audit_server_role) return;
+
+    if (executor) {
+        const now = Date.now();
+        const key = `${role.guild.id}:${executor.id}`;
+
+        if (!nukeTracker.has(key)) nukeTracker.set(key, []);
+        const actions = nukeTracker.get(key);
+
+        actions.push({ time: now, type: 'roleDelete' });
+
+        const window = config.anti_nuke_window_ms || 10000;
+        const recent = actions.filter(a => now - a.time < window);
+
+        nukeTracker.set(key, recent);
+
+        if (recent.length >= (config.anti_nuke_threshold || 4)) {
+            await log(role.guild, config, 'POTENTIAL NUKE',
+                `**User:** ${executor.tag}\n**Action:** Role Delete\n**Count:** ${recent.length} in ${window/1000}s`,
+                0xff0000, executor.id, executor.tag
+            );
+
+            if (!config.test_mode) {
+                const member = await role.guild.members.fetch(executor.id).catch(() => null);
+
+                if (member && !await isExempt(role.guild.id, member)) {
+                    await takeAction(
+                        member,
+                        config.anti_nuke_action || 'ban',
+                        'Anti-nuke: mass role deletion',
+                        config
+                    );
+                }
+            }
+
+            nukeTracker.set(key, []);
+        }
+    }
+
     await audit(role.guild, 'ROLE DELETED', 'server',
-        role.id, role.name, null,
+        role.id,
+        role.name,
+        executor ? executor.tag : null,
         `Role: ${role.name}`,
         0xff4444
     );
