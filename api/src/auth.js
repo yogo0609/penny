@@ -43,15 +43,15 @@ function requireOwner(req, res, next) {
 
 // === SETUP CHECK ===
 // REF-AUTH-04
-router.get('/setup/status', (req, res) => {
-    res.json({ setupRequired: !db.hasOwner() });
+router.get('/setup/status', async (req, res) => {
+    res.json({ setupRequired: !(await db.hasOwner()) });
 });
 
 
 // === INITIAL SETUP ===
 // REF-AUTH-05
 router.post('/setup', async (req, res) => {
-    if (db.hasOwner()) {
+    if (await db.hasOwner()) {
         return res.status(403).json({ error: 'Setup already complete' });
     }
 
@@ -67,7 +67,7 @@ router.post('/setup', async (req, res) => {
 
     try {
         const hashed = await bcrypt.hash(password, SALT_ROUNDS);
-        db.createUser(username, hashed, 'owner', discord_id || null);
+        await db.createUser(username, hashed, 'owner', discord_id || null);
         res.json({ success: true, message: 'Platform Owner created' });
     } catch (err) {
         res.status(500).json({ error: 'Failed to create owner' });
@@ -84,7 +84,7 @@ router.post('/login', async (req, res) => {
         return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    const user = db.getUserByUsername(username);
+    const user = await db.getUserByUsername(username);
 
     if (!user) {
         return res.status(401).json({ error: 'Invalid credentials' });
@@ -96,7 +96,7 @@ router.post('/login', async (req, res) => {
         return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    db.updateLastLogin(user.id);
+    await db.updateLastLogin(user.id);
 
     const token = jwt.sign(
         { id: user.id, username: user.username, role: user.role },
@@ -119,8 +119,8 @@ router.post('/login', async (req, res) => {
 
 // === GET CURRENT USER ===
 // REF-AUTH-07
-router.get('/me', verifyToken, (req, res) => {
-    const user = db.getUserById(req.user.id);
+router.get('/me', verifyToken, async (req, res) => {
+    const user = await db.getUserById(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json({
         id:         user.id,
@@ -135,20 +135,20 @@ router.get('/me', verifyToken, (req, res) => {
 
 // === UPDATE OWN THEME ===
 // REF-AUTH-12
-router.patch('/me/theme', verifyToken, (req, res) => {
+router.patch('/me/theme', verifyToken, async (req, res) => {
     const { theme } = req.body;
     if (!['light', 'dark'].includes(theme)) {
         return res.status(400).json({ error: 'Theme must be light or dark' });
     }
-    db.updateUserTheme(req.user.id, theme);
+    await db.updateUserTheme(req.user.id, theme);
     res.json({ success: true, theme });
 });
 
 
 // === GET ALL USERS (owner only) ===
 // REF-AUTH-08
-router.get('/users', verifyToken, requireOwner, (req, res) => {
-    res.json(db.getAllUsers());
+router.get('/users', verifyToken, requireOwner, async (req, res) => {
+    res.json(await db.getAllUsers());
 });
 
 
@@ -167,7 +167,7 @@ router.post('/users', verifyToken, requireOwner, async (req, res) => {
 
     try {
         const hashed = await bcrypt.hash(password, SALT_ROUNDS);
-        db.createUser(username, hashed, 'admin', discord_id || null);
+        await db.createUser(username, hashed, 'admin', discord_id || null);
         res.json({ success: true });
     } catch (err) {
         if (err.message.includes('UNIQUE')) {
@@ -180,7 +180,7 @@ router.post('/users', verifyToken, requireOwner, async (req, res) => {
 
 // === UPDATE USER ROLE (owner only) ===
 // REF-AUTH-10
-router.patch('/users/:id/role', verifyToken, requireOwner, (req, res) => {
+router.patch('/users/:id/role', verifyToken, requireOwner, async (req, res) => {
     const { id }   = req.params;
     const { role } = req.body;
 
@@ -192,21 +192,21 @@ router.patch('/users/:id/role', verifyToken, requireOwner, (req, res) => {
         return res.status(400).json({ error: 'Cannot change your own role' });
     }
 
-    db.updateUserRole(parseInt(id), role);
+    await db.updateUserRole(parseInt(id), role);
     res.json({ success: true });
 });
 
 
 // === DELETE USER (owner only) ===
 // REF-AUTH-11
-router.delete('/users/:id', verifyToken, requireOwner, (req, res) => {
+router.delete('/users/:id', verifyToken, requireOwner, async (req, res) => {
     const { id } = req.params;
 
     if (parseInt(id) === req.user.id) {
         return res.status(400).json({ error: 'Cannot delete your own account' });
     }
 
-    db.deleteUser(parseInt(id));
+    await db.deleteUser(parseInt(id));
     res.json({ success: true });
 });
 
@@ -218,21 +218,21 @@ router.patch('/me', verifyToken, async (req, res) => {
 
     try {
         if (username) {
-            const existing = db.getUserByUsername(username);
+            const existing = await db.getUserByUsername(username);
             if (existing && existing.id !== userId) {
                 return res.status(409).json({ error: 'Username already taken' });
             }
-            db.db.prepare('UPDATE dashboard_users SET username = ? WHERE id = ?').run(username, userId);
+            db.updateUsername(userId, username);
         }
         if (password) {
             if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
             const hashed = await bcrypt.hash(password, SALT_ROUNDS);
-            db.db.prepare('UPDATE dashboard_users SET password = ? WHERE id = ?').run(hashed, userId);
+            db.updatePassword(userId, hashed);
         }
         if (discord_id !== undefined) {
-            db.db.prepare('UPDATE dashboard_users SET discord_id = ? WHERE id = ?').run(discord_id || null, userId);
+            db.updateDiscordId(userId, discord_id || null);
         }
-        const updated = db.getUserById(userId);
+        const updated = await db.getUserById(userId);
         res.json({ success: true, user: {
             id:         updated.id,
             username:   updated.username,
@@ -255,19 +255,19 @@ router.patch('/users/:id', verifyToken, requireOwner, async (req, res) => {
 
     try {
         if (username) {
-            const existing = db.getUserByUsername(username);
+            const existing = await db.getUserByUsername(username);
             if (existing && existing.id !== userId) {
                 return res.status(409).json({ error: 'Username already taken' });
             }
-            db.db.prepare('UPDATE dashboard_users SET username = ? WHERE id = ?').run(username, userId);
+            db.updateUsername(userId, username);
         }
         if (password) {
             if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
             const hashed = await bcrypt.hash(password, SALT_ROUNDS);
-            db.db.prepare('UPDATE dashboard_users SET password = ? WHERE id = ?').run(hashed, userId);
+            db.updatePassword(userId, hashed);
         }
         if (discord_id !== undefined) {
-            db.db.prepare('UPDATE dashboard_users SET discord_id = ? WHERE id = ?').run(discord_id || null, userId);
+            db.updateDiscordId(userId, discord_id || null);
         }
         res.json({ success: true });
     } catch (err) {

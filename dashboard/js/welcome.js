@@ -5,10 +5,14 @@
 // ============================================================
 
 
-// REF-WEL-02
-function renderWelcome(tab) {
+/// REF-WEL-02
+async function renderWelcome(tab) {
     const el = document.getElementById('content');
     const c  = State.config;
+    const [channels, roles] = await Promise.all([
+        loadChannels(State.guildId),
+        loadRoles(State.guildId)
+    ]);
 
     if (tab === 'Welcome Message') {
         el.innerHTML = `
@@ -26,10 +30,10 @@ function renderWelcome(tab) {
                 </div>
                 <div class="toggle-row">
                     <div class="toggle-info">
-                        <div class="toggle-name">Channel ID</div>
+                        <div class="toggle-name">Channel</div>
                         <div class="toggle-desc">Channel where welcome messages are posted</div>
                     </div>
-                    <input id="welcome_channel_id" value="${c.welcome_channel_id || ''}" placeholder="Channel ID" style="width:220px">
+                    ${channelSelect('welcome_channel_id', channels, c.welcome_channel_id, [0])}
                 </div>
                 <div class="toggle-row">
                     <div class="toggle-info">
@@ -60,10 +64,10 @@ function renderWelcome(tab) {
                 </div>
                 <div class="toggle-row">
                     <div class="toggle-info">
-                        <div class="toggle-name">Role ID</div>
+                        <div class="toggle-name">Role</div>
                         <div class="toggle-desc">The role to assign on join</div>
                     </div>
-                    <input id="autorole_id" value="${c.autorole_id || ''}" placeholder="Role ID" style="width:220px">
+                    ${roleSelect('autorole_id', roles, c.autorole_id)}
                 </div>
                 <div class="card-footer">
                     <button class="btn-primary" onclick="saveWelcome()">Save</button>
@@ -71,8 +75,6 @@ function renderWelcome(tab) {
             </div>`;
     }
 }
-
-
 // REF-WEL-03
 async function saveWelcome() {
     if (!State.guildId) { toast('No server selected', 'error'); return; }

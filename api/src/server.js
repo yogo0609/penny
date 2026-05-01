@@ -43,6 +43,14 @@ app.use((err, req, res, next) => {
 
 
 // === START ===
-app.listen(PORT, () => {
-    console.log(`✅ Penny API running on port ${PORT}`);
-});
+const db = require('./database');
+db.initSchema()
+    .then(() => {
+        app.listen(PORT, () => {
+            console.log(`✅ Penny API running on port ${PORT}`);
+        });
+    })
+    .catch(err => {
+        console.error(`❌ Failed to initialize database: ${err.message}`);
+        process.exit(1);
+    });

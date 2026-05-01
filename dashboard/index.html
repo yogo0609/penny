@@ -83,108 +83,103 @@
 
             <nav class="nav">
 
-                <!-- Dashboard — top level, no group -->
-                <button class="nav-item nav-top" data-section="overview">DASHBOARD</button>
+  <!-- REF-NAV-01 — Dashboard -->
+  <button class="nav-item nav-top" data-section="overview">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>
+    Dashboard
+  </button>
 
-                <!-- Security -->
-                <div class="nav-group" id="group-security">
-                    <button class="nav-group-header" onclick="toggleGroup('security')">
-                        <span>SECURITY</span>
-                        <span class="nav-chevron" id="chevron-security">▸</span>
-                    </button>
-                    <div class="nav-group-children" id="children-security">
-                        <button class="nav-item" data-section="secoverview">Overview</button>
-                        <button class="nav-item" data-section="secspam">Spam Detection</button>
-                        <button class="nav-item" data-section="secraid">Anti-Raid</button>
-                        <button class="nav-item" data-section="secbadwords">Bad Word Filter</button>
-                        <button class="nav-item" data-section="seccaps">Caps Filter</button>
-                        <button class="nav-item" data-section="secmention">Mass Mention</button>
-                        <button class="nav-item" data-section="secinvite">Anti-Invite Links</button>
-                        <button class="nav-item" data-section="secage">Account Age Gate</button>
-                        <button class="nav-item" data-section="secantilink">Anti-Link</button>
-                        <button class="nav-item" data-section="secrepeat">Repeated Text</button>
-                        <button class="nav-item" data-section="secemoji">Emoji Spam</button>
-                        <button class="nav-item" data-section="secnewline">Newline Spam</button>
-                        <button class="nav-item" data-section="seczalgo">Zalgo Text</button>
-                        <button class="nav-item" data-section="sechoist">Anti-Hoist</button>
-                        <button class="nav-item" data-section="antinuke">Anti-Nuke</button>
-                        <button class="nav-item" data-section="panicmode">Panic Mode</button>
-                        <button class="nav-item" data-section="verification">Verification</button>
-                        <button class="nav-item" data-section="joingate">Join Gate</button>
-                    </div>
-                </div>
+  <!-- REF-NAV-02 — Security -->
+  <div class="nav-group" id="group-security">
+    <button class="nav-group-header" onclick="toggleGroup('security')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1L2 3.5v4.5c0 3.5 2.5 5.5 6 6.5 3.5-1 6-3 6-6.5V3.5L8 1z"/></svg>
+      Security
+      <span class="nav-chevron" id="chevron-security">▸</span>
+    </button>
+    <div class="nav-group-children" id="children-security">
+      <button class="nav-item" data-section="secoverview">Overview</button>
+      <button class="nav-item" data-section="security">Auto-Mod</button>
+      <button class="nav-item" data-section="antinuke">Anti-Nuke</button>
+      <button class="nav-item" data-section="joingate">Join Gate</button>
+      <button class="nav-item" data-section="verification">Verification</button>
+      <button class="nav-item" data-section="panicmode">Panic Mode</button>
+    </div>
+  </div>
 
-                <!-- Moderation -->
-                <div class="nav-group" id="group-moderation">
-                    <button class="nav-group-header" onclick="toggleGroup('moderation')">
-                        <span>MODERATION</span>
-                        <span class="nav-chevron" id="chevron-moderation">▸</span>
-                    </button>
-                    <div class="nav-group-children" id="children-moderation">
-                        <button class="nav-item" data-section="modlog">Mod Log</button>
-                        <button class="nav-item" data-section="warnings">Warnings</button>
-                        <button class="nav-item" data-section="punishments">Punishment Ladder</button>
-                        <button class="nav-item" data-section="exemptions">Exemptions</button>
-                    </div>
-                </div>
+  <!-- REF-NAV-03 — Moderation -->
+  <div class="nav-group" id="group-moderation">
+    <button class="nav-group-header" onclick="toggleGroup('moderation')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h8M2 12h10"/></svg>
+      Moderation
+      <span class="nav-chevron" id="chevron-moderation">▸</span>
+    </button>
+    <div class="nav-group-children" id="children-moderation">
+      <button class="nav-item" data-section="modlog">Mod Log</button>
+      <button class="nav-item" data-section="warnings">Warnings</button>
+      <button class="nav-item" data-section="punishments">Punishment Ladder</button>
+      <button class="nav-item" data-section="exemptions">Exemptions</button>
+    </div>
+  </div>
 
-                <!-- Audit Log -->
-                <div class="nav-group" id="group-audit">
-                    <button class="nav-group-header" onclick="toggleGroup('audit')">
-                        <span>AUDIT LOG</span>
-                        <span class="nav-chevron" id="chevron-audit">▸</span>
-                    </button>
-                    <div class="nav-group-children" id="children-audit">
-                        <button class="nav-item" data-section="auditlog">Events</button>
-                        <button class="nav-item" data-section="auditconfig">Settings</button>
-                    </div>
-                </div>
+  <!-- REF-NAV-04 — Audit Log -->
+  <div class="nav-group" id="group-audit">
+    <button class="nav-group-header" onclick="toggleGroup('audit')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 6h6M5 9h4"/></svg>
+      Audit Log
+      <span class="nav-chevron" id="chevron-audit">▸</span>
+    </button>
+    <div class="nav-group-children" id="children-audit">
+      <button class="nav-item" data-section="auditlog">Events</button>
+      <button class="nav-item" data-section="auditconfig">Settings</button>
+    </div>
+  </div>
 
-                <!-- Community -->
-                <div class="nav-group" id="group-community">
-                    <button class="nav-group-header" onclick="toggleGroup('community')">
-                        <span>COMMUNITY</span>
-                        <span class="nav-chevron" id="chevron-community">▸</span>
-                    </button>
-                    <div class="nav-group-children" id="children-community">
-                        <button class="nav-item" data-section="leveling">Leveling</button>
-                        <button class="nav-item" data-section="reactionroles">Reaction Roles</button>
-                        <button class="nav-item" data-section="giveaways">Giveaways</button>
-                        <button class="nav-item" data-section="polls">Polls</button>
-                        <button class="nav-item" data-section="tickets">Ticketing</button>
-                    </div>
-                </div>
+  <!-- REF-NAV-05 — Community -->
+  <div class="nav-group" id="group-community">
+    <button class="nav-group-header" onclick="toggleGroup('community')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="5" r="2.5"/><circle cx="11" cy="5" r="2.5"/><path d="M1 14c0-2.5 1.8-4 4-4s4 1.5 4 4M9 11c.5-.3 1.2-.5 2-.5 2.2 0 4 1.5 4 3.5"/></svg>
+      Community
+      <span class="nav-chevron" id="chevron-community">▸</span>
+    </button>
+    <div class="nav-group-children" id="children-community">
+      <button class="nav-item" data-section="reactionroles">Reaction Roles</button>
+      <button class="nav-item" data-section="giveaways">Giveaways</button>
+      <button class="nav-item" data-section="polls">Polls</button>
+      <button class="nav-item" data-section="tickets">Ticketing</button>
+    </div>
+  </div>
 
-                <!-- Automation -->
-                <div class="nav-group" id="group-automation">
-                    <button class="nav-group-header" onclick="toggleGroup('automation')">
-                        <span>AUTOMATION</span>
-                        <span class="nav-chevron" id="chevron-automation">▸</span>
-                    </button>
-                    <div class="nav-group-children" id="children-automation">
-                        <button class="nav-item" data-section="commands">Custom Commands</button>
-                        <button class="nav-item" data-section="autoresponder">Auto-Responder</button>
-                        <button class="nav-item" data-section="scheduled">Scheduled Messages</button>
-                        <button class="nav-item" data-section="reminders">Reminders</button>
-                        <button class="nav-item" data-section="afk">AFK Status</button>
-                        <button class="nav-item" data-section="socials">Social Alerts</button>
-                    </div>
-                </div>
+  <!-- REF-NAV-06 — Automation -->
+  <div class="nav-group" id="group-automation">
+    <button class="nav-group-header" onclick="toggleGroup('automation')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8h3l2-5 3 10 2-5h2"/></svg>
+      Automation
+      <span class="nav-chevron" id="chevron-automation">▸</span>
+    </button>
+    <div class="nav-group-children" id="children-automation">
+      <button class="nav-item" data-section="commands">Custom Commands</button>
+      <button class="nav-item" data-section="autoresponder">Auto-Responder</button>
+      <button class="nav-item" data-section="scheduled">Scheduled Messages</button>
+      <button class="nav-item" data-section="reminders">Reminders</button>
+      <button class="nav-item" data-section="afk">AFK Status</button>
+    </div>
+  </div>
 
-                <!-- Configuration -->
-                <div class="nav-group" id="group-configuration">
-                    <button class="nav-group-header" onclick="toggleGroup('configuration')">
-                        <span>CONFIGURATION</span>
-                        <span class="nav-chevron" id="chevron-configuration">▸</span>
-                    </button>
-                    <div class="nav-group-children" id="children-configuration">
-                        <button class="nav-item" data-section="welcome">Welcome & Roles</button>
-                        <button class="nav-item owner-only" data-section="users">Users</button>
-                        <button class="nav-item" data-section="settings">Settings</button>
-                    </div>
-                </div>
+  <!-- REF-NAV-07 — Configuration -->
+  <div class="nav-group" id="group-configuration">
+    <button class="nav-group-header" onclick="toggleGroup('configuration')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.5 1.5M11.5 11.5L13 13M3 13l1.5-1.5M11.5 4.5L13 3"/></svg>
+      Configuration
+      <span class="nav-chevron" id="chevron-configuration">▸</span>
+    </button>
+    <div class="nav-group-children" id="children-configuration">
+      <button class="nav-item" data-section="welcome">Welcome & Roles</button>
+      <button class="nav-item owner-only" data-section="users">Users</button>
+      <button class="nav-item" data-section="settings">Settings</button>
+    </div>
+  </div>
 
-            </nav>
+</nav>
 
             <div class="sidebar-footer">
                 <div class="sb-user">

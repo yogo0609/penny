@@ -169,6 +169,18 @@ const commands = [
         .addStringOption(opt =>
             opt.setName('reason').setDescription('Reason').setRequired(false)),
 
+    new SlashCommandBuilder()
+        .setName('quarantine')
+        .setDescription('Quarantine a user')
+        .addUserOption(o => o.setName('user').setDescription('User to quarantine').setRequired(true))
+        .addStringOption(o => o.setName('reason').setDescription('Reason').setRequired(false)),
+
+    new SlashCommandBuilder()
+        .setName('unquarantine')
+        .setDescription('Release a user from quarantine')
+        .addUserOption(o => o.setName('user').setDescription('User to release').setRequired(true))
+        .addStringOption(o => o.setName('reason').setDescription('Reason').setRequired(false)),
+
     // === PANIC ===
     new SlashCommandBuilder()
         .setName('panic')

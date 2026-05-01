@@ -8,9 +8,7 @@ const db      = require('./database');
 // REF-RT-01
 function authenticate(req, res, next) {
     const apiKey = req.headers['x-api-key'];
-    if (apiKey && apiKey === process.env.API_SECRET) {
-        return next();
-    }
+    if (apiKey && apiKey === process.env.API_SECRET) return next();
 
     const auth  = req.headers['authorization'];
     const token = auth && auth.split(' ')[1];
@@ -34,28 +32,25 @@ router.get('/health', (req, res) => {
     res.json({ status: 'ok', service: 'Penny API' });
 });
 
-// REF-RT-02a — Get all guilds Penny is in
-router.get('/guilds', (req, res) => {
-    res.json(db.getGuilds());
+// REF-RT-02a
+router.get('/guilds', async (req, res) => {
+    res.json(await db.getGuilds());
 });
 
-// REF-RT-02b — Bot registers its guilds on startup
-router.post('/guilds', (req, res) => {
+// REF-RT-02b
+router.post('/guilds', async (req, res) => {
     const { guilds } = req.body;
-    if (!guilds || !Array.isArray(guilds)) {
-        return res.status(400).json({ error: 'guilds array required' });
-    }
-    db.setGuilds(guilds);
+    if (!guilds || !Array.isArray(guilds)) return res.status(400).json({ error: 'guilds array required' });
+    await db.setGuilds(guilds);
     res.json({ success: true });
 });
 
 
 // === CONFIG ROUTES ===
 
-// REF-RT-03 — Get all config for a guild
-router.get('/config/:guildId', (req, res) => {
+// REF-RT-03
+router.get('/config/:guildId', async (req, res) => {
     const { guildId } = req.params;
-
     const keys = [
         'test_mode',
         'log_channel_id',
@@ -70,430 +65,408 @@ router.get('/config/:guildId', (req, res) => {
         'emojispam_enabled', 'emojispam_action', 'emojispam_max',
         'newline_enabled', 'newline_action', 'newline_max',
         'zalgo_enabled', 'zalgo_action',
-        'anti_nuke_enabled',
-        'anti_nuke_threshold',
-        'anti_nuke_window_ms',
-        'anti_nuke_action',
+        'anti_nuke_enabled', 'anti_nuke_threshold', 'anti_nuke_window_ms', 'anti_nuke_action',
         'antihoist_enabled',
         'accountage_enabled', 'accountage_min_days',
+        'joingate_avatar_enabled', 'joingate_username_enabled', 'joingate_rejoin_enabled', 'joingate_rejoin_minutes',
+        'verification_enabled', 'verification_channel_id', 'verification_role_id', 'verification_timeout_minutes',
         'welcome_enabled', 'welcome_channel_id', 'welcome_message',
         'autorole_enabled', 'autorole_id',
         'levels_enabled',
-        'panic_alert_role',
-        'panic_alert_channel',
-        'panic_authorized_roles',
+        'panic_alert_role', 'panic_alert_channel', 'panic_authorized_roles',
         'audit_channel_id',
-        'audit_messages',
-        'audit_messages_edit',
-        'audit_messages_bulk',
-        'audit_members',
-        'audit_members_leave',
-        'audit_members_roles',
-        'audit_members_nick',
-        'audit_members_ban',
-        'audit_members_unban',
-        'audit_members_kick',
-        'audit_members_timeout',
-        'audit_server_channel',
-        'audit_server_role',
-        'audit_server_emoji',
-        'audit_server_webhook',
+        'audit_messages', 'audit_messages_edit', 'audit_messages_bulk',
+        'audit_members', 'audit_members_leave', 'audit_members_roles', 'audit_members_nick',
+        'audit_members_ban', 'audit_members_unban', 'audit_members_kick', 'audit_members_timeout',
+        'audit_server_channel', 'audit_server_role', 'audit_server_emoji', 'audit_server_webhook',
         'audit_voice',
     ];
-
-    const config = {};
-    for (const key of keys) {
-        config[key] = db.getConfig(guildId, key, null);
-    }
-
+    const config = await db.getConfigAll(guildId, keys);
     res.json(config);
 });
 
-// REF-RT-04 — Update a single config value
-router.patch('/config/:guildId', (req, res) => {
+// REF-RT-04
+router.patch('/config/:guildId', async (req, res) => {
     const { guildId } = req.params;
     const { key, value } = req.body;
-
-    if (!key || value === undefined) {
-        return res.status(400).json({ error: 'key and value are required' });
-    }
-
-    db.setConfig(guildId, key, value);
+    if (!key || value === undefined) return res.status(400).json({ error: 'key and value are required' });
+    await db.setConfig(guildId, key, value);
     res.json({ success: true, key, value });
 });
 
-// REF-RT-05 — Bulk update config
-router.put('/config/:guildId', (req, res) => {
+// REF-RT-05
+router.put('/config/:guildId', async (req, res) => {
     const { guildId } = req.params;
     const updates = req.body;
-
-    if (!updates || typeof updates !== 'object') {
-        return res.status(400).json({ error: 'Body must be a JSON object' });
-    }
-
+    if (!updates || typeof updates !== 'object') return res.status(400).json({ error: 'Body must be a JSON object' });
     for (const [key, value] of Object.entries(updates)) {
-        db.setConfig(guildId, key, value);
+        await db.setConfig(guildId, key, value);
     }
-
     res.json({ success: true, updated: Object.keys(updates).length });
 });
 
 
 // === EXEMPTION ROUTES ===
 
-// REF-RT-06 — Get all exemptions for a guild
-router.get('/exemptions/:guildId', (req, res) => {
+// REF-RT-06
+router.get('/exemptions/:guildId', async (req, res) => {
     const { guildId } = req.params;
     res.json({
-        roles:    db.getExemptions(guildId, 'role'),
-        users:    db.getExemptions(guildId, 'user'),
-        channels: db.getExemptions(guildId, 'channel'),
+        roles:    await db.getExemptions(guildId, 'role'),
+        users:    await db.getExemptions(guildId, 'user'),
+        channels: await db.getExemptions(guildId, 'channel'),
     });
 });
 
-// REF-RT-07 — Add an exemption
-router.post('/exemptions/:guildId', (req, res) => {
+// REF-RT-07
+router.post('/exemptions/:guildId', async (req, res) => {
     const { guildId } = req.params;
     const { type, target_id, added_by } = req.body;
-
-    if (!type || !target_id || !added_by) {
-        return res.status(400).json({ error: 'type, target_id, and added_by are required' });
-    }
-
-    if (!['role', 'user', 'channel'].includes(type)) {
-        return res.status(400).json({ error: 'type must be role, user, or channel' });
-    }
-
-    db.addExemption(guildId, type, target_id, added_by);
+    if (!type || !target_id || !added_by) return res.status(400).json({ error: 'type, target_id, and added_by are required' });
+    if (!['role', 'user', 'channel'].includes(type)) return res.status(400).json({ error: 'type must be role, user, or channel' });
+    await db.addExemption(guildId, type, target_id, added_by);
     res.json({ success: true });
 });
 
-// REF-RT-08 — Remove an exemption
-router.delete('/exemptions/:guildId', (req, res) => {
+// REF-RT-08
+router.delete('/exemptions/:guildId', async (req, res) => {
     const { guildId } = req.params;
     const { type, target_id } = req.body;
-
-    if (!type || !target_id) {
-        return res.status(400).json({ error: 'type and target_id are required' });
-    }
-
-    db.removeExemption(guildId, type, target_id);
+    if (!type || !target_id) return res.status(400).json({ error: 'type and target_id are required' });
+    await db.removeExemption(guildId, type, target_id);
     res.json({ success: true });
 });
 
 
 // === MOD LOG ROUTES ===
 
-// REF-RT-09 — Get mod logs for a guild
-router.get('/logs/:guildId', (req, res) => {
+// REF-RT-09
+router.get('/logs/:guildId', async (req, res) => {
     const { guildId } = req.params;
     const limit = parseInt(req.query.limit) || 50;
-    res.json(db.getModLogs(guildId, limit));
+    res.json(await db.getModLogs(guildId, limit));
 });
 
-// REF-RT-09a — Post a mod log entry from the bot
-router.post('/logs/:guildId', (req, res) => {
-    const { guildId }                                              = req.params;
-    const { action, target_id, target_tag, moderator, reason }    = req.body;
-
+// REF-RT-09a
+router.post('/logs/:guildId', async (req, res) => {
+    const { guildId } = req.params;
+    const { action, target_id, target_tag, moderator, reason } = req.body;
     if (!action) return res.status(400).json({ error: 'action is required' });
-
-    db.addModLog(guildId, action, target_id || null, target_tag || null, moderator || 'Penny', reason || null);
+    await db.addModLog(guildId, action, target_id || null, target_tag || null, moderator || 'Penny', reason || null);
     res.json({ success: true });
 });
 
 
 // === WARNING ROUTES ===
 
-// REF-RT-10 — Get warnings for a user
-router.get('/warnings/:guildId/:userId', (req, res) => {
+// REF-RT-10
+router.get('/warnings/:guildId/:userId', async (req, res) => {
     const { guildId, userId } = req.params;
-    res.json(db.getWarnings(guildId, userId));
+    res.json(await db.getWarnings(guildId, userId));
 });
 
-// REF-RT-10a — Get all warnings for a guild
-router.get('/warnings/:guildId', (req, res) => {
+// REF-RT-10a
+router.get('/warnings/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    const warnings = db.db.prepare(
-        'SELECT * FROM warnings WHERE guild_id = ? ORDER BY issued_at DESC'
-    ).all(guildId);
-    res.json(warnings);
+    res.json(await db.getAllWarnings(guildId));
 });
 
-// REF-RT-11 — Add a warning manually from dashboard
-router.post('/warnings/:guildId', (req, res) => {
+// REF-RT-11
+router.post('/warnings/:guildId', async (req, res) => {
     const { guildId } = req.params;
     const { user_id, user_tag, reason, issued_by } = req.body;
-
-    if (!user_id || !user_tag || !issued_by) {
-        return res.status(400).json({ error: 'user_id, user_tag, and issued_by are required' });
-    }
-
-    db.addWarning(guildId, user_id, user_tag, reason || 'No reason provided', issued_by);
+    if (!user_id || !user_tag || !issued_by) return res.status(400).json({ error: 'user_id, user_tag, and issued_by are required' });
+    await db.addWarning(guildId, user_id, user_tag, reason || 'No reason provided', issued_by);
     res.json({ success: true });
 });
 
-// REF-RT-12 — Clear all warnings for a user
-router.delete('/warnings/:guildId/:userId', (req, res) => {
+// REF-RT-12
+router.delete('/warnings/:guildId/:userId', async (req, res) => {
     const { guildId, userId } = req.params;
-    db.db.prepare(
-        'DELETE FROM warnings WHERE guild_id = ? AND user_id = ?'
-    ).run(guildId, userId);
+    await db.clearUserWarnings(guildId, userId);
     res.json({ success: true });
 });
 
 
 // === BAN ROUTES ===
 
-// REF-RT-13 — Get active bans for a guild
-router.get('/bans/:guildId', (req, res) => {
+// REF-RT-13
+router.get('/bans/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    res.json(db.getActiveBans(guildId));
+    res.json(await db.getActiveBans(guildId));
 });
 
-// REF-RT-14 — Add a ban record
-router.post('/bans/:guildId', (req, res) => {
-    const { guildId }                              = req.params;
+// REF-RT-14
+router.post('/bans/:guildId', async (req, res) => {
+    const { guildId } = req.params;
     const { user_id, user_tag, reason, banned_by } = req.body;
-
-    if (!user_id || !user_tag || !banned_by) {
-        return res.status(400).json({ error: 'user_id, user_tag and banned_by are required' });
-    }
-
-    db.addBan(guildId, user_id, user_tag, reason || 'No reason provided', banned_by);
+    if (!user_id || !user_tag || !banned_by) return res.status(400).json({ error: 'user_id, user_tag and banned_by are required' });
+    await db.addBan(guildId, user_id, user_tag, reason || 'No reason provided', banned_by);
     res.json({ success: true });
 });
 
-// REF-RT-15 — Remove a ban record (unban)
-router.patch('/bans/:guildId/:userId', (req, res) => {
+// REF-RT-15
+router.patch('/bans/:guildId/:userId', async (req, res) => {
     const { guildId, userId } = req.params;
-    const { unbanned_by }     = req.body;
-
+    const { unbanned_by } = req.body;
     if (!unbanned_by) return res.status(400).json({ error: 'unbanned_by is required' });
-
-    db.removeBan(guildId, userId, unbanned_by);
+    await db.removeBan(guildId, userId, unbanned_by);
     res.json({ success: true });
 });
 
-// REF-RT-16 — Get ban history for a user
-router.get('/bans/:guildId/:userId', (req, res) => {
+// REF-RT-16
+router.get('/bans/:guildId/:userId', async (req, res) => {
     const { guildId, userId } = req.params;
-    res.json(db.getBanHistory(guildId, userId));
+    res.json(await db.getBanHistory(guildId, userId));
 });
 
 
 // === AUDIT LOG ROUTES ===
 
-// REF-RT-17 — Get audit logs for a guild
-router.get('/audit/:guildId', (req, res) => {
-    const { guildId }  = req.params;
-    const limit        = parseInt(req.query.limit) || 100;
-    const category     = req.query.category || null;
-    res.json(db.getAuditLogs(guildId, limit, category));
-});
-
-// REF-RT-18 — Post an audit log event
-router.post('/audit/:guildId', (req, res) => {
-    const { guildId }                                                   = req.params;
-    const { event, category, target_id, target_tag, moderator, detail } = req.body;
-
-    if (!event || !category) {
-        return res.status(400).json({ error: 'event and category are required' });
-    }
-
-    db.addAuditLog(guildId, event, category, target_id, target_tag, moderator, detail);
-    res.json({ success: true });
-});
-
-// REF-RT-19 — Get audit config for a guild
-router.get('/audit-config/:guildId', (req, res) => {
+// REF-RT-17
+router.get('/audit/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    res.json(db.getAuditConfig(guildId));
+    const limit    = parseInt(req.query.limit) || 100;
+    const category = req.query.category || null;
+    res.json(await db.getAuditLogs(guildId, limit, category));
 });
 
-// REF-RT-20 — Update audit config for a guild
-router.post('/audit-config/:guildId', (req, res) => {
-    const { guildId }                    = req.params;
-    const { event, enabled, channel_id } = req.body;
-
-    if (!event || enabled === undefined) {
-        return res.status(400).json({ error: 'event and enabled are required' });
-    }
-
-    db.setAuditConfig(guildId, event, enabled, channel_id || null);
+// REF-RT-18
+router.post('/audit/:guildId', async (req, res) => {
+    const { guildId } = req.params;
+    const { event, category, target_id, target_tag, moderator, detail } = req.body;
+    if (!event || !category) return res.status(400).json({ error: 'event and category are required' });
+    await db.addAuditLog(guildId, event, category, target_id, target_tag, moderator, detail);
     res.json({ success: true });
 });
+
+// REF-RT-19
+router.get('/audit-config/:guildId', async (req, res) => {
+    const { guildId } = req.params;
+    res.json(await db.getAuditConfig(guildId));
+});
+
+// REF-RT-20
+router.post('/audit-config/:guildId', async (req, res) => {
+    const { guildId } = req.params;
+    const { event, enabled, channel_id } = req.body;
+    if (!event || enabled === undefined) return res.status(400).json({ error: 'event and enabled are required' });
+    await db.setAuditConfig(guildId, event, enabled, channel_id || null);
+    res.json({ success: true });
+});
+
 
 // === DATA MANAGEMENT ROUTES ===
 
-// REF-RT-27 — Export all guild data as JSON
-router.get('/export/:guildId', (req, res) => {
+// REF-RT-27
+router.get('/export/:guildId', async (req, res) => {
     const { guildId } = req.params;
     try {
-        const config   = db.db.prepare('SELECT key, value FROM config WHERE guild_id = ?').all(guildId);
-        const modLogs  = db.getModLogs(guildId, 99999);
-        const warnings = db.db.prepare('SELECT * FROM warnings WHERE guild_id = ?').all(guildId);
-        const bans     = db.getActiveBans(guildId);
-        const audit    = db.getAuditLogs(guildId, 99999);
-        const ladder   = db.getLadder(guildId);
+        const { config, warnings } = await db.exportGuildData(guildId);
         res.json({
             guildId,
             exportedAt: new Date().toISOString(),
             config,
-            modLogs,
+            modLogs:  await db.getModLogs(guildId, 99999),
             warnings,
-            bans,
-            audit,
-            ladder,
+            bans:     await db.getActiveBans(guildId),
+            audit:    await db.getAuditLogs(guildId, 99999),
+            ladder:   await db.getLadder(guildId),
         });
     } catch(err) {
         res.status(500).json({ error: 'Export failed' });
     }
 });
 
-// REF-RT-28 — Clear mod logs
-router.delete('/data/logs/:guildId', (req, res) => {
+// REF-RT-28
+router.delete('/data/logs/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    db.db.prepare('DELETE FROM mod_log WHERE guild_id = ?').run(guildId);
+    await db.clearModLogs(guildId);
     res.json({ success: true });
 });
 
-// REF-RT-29 — Clear audit logs
-router.delete('/data/audit/:guildId', (req, res) => {
+// REF-RT-29
+router.delete('/data/audit/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    db.db.prepare('DELETE FROM audit_log WHERE guild_id = ?').run(guildId);
+    await db.clearAuditLogs(guildId);
     res.json({ success: true });
 });
 
-// REF-RT-30 — Clear all warnings
-router.delete('/data/warnings/:guildId', (req, res) => {
+// REF-RT-30
+router.delete('/data/warnings/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    db.db.prepare('DELETE FROM warnings WHERE guild_id = ?').run(guildId);
+    await db.clearWarnings(guildId);
     res.json({ success: true });
 });
 
-// REF-RT-31 — Clear ban records
-router.delete('/data/bans/:guildId', (req, res) => {
+// REF-RT-31
+router.delete('/data/bans/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    db.db.prepare('DELETE FROM bans WHERE guild_id = ?').run(guildId);
+    await db.clearBans(guildId);
     res.json({ success: true });
 });
 
-// REF-RT-32 — Clear punishment ladder
-router.delete('/data/ladder/:guildId', (req, res) => {
+// REF-RT-32
+router.delete('/data/ladder/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    db.clearLadder(guildId);
+    await db.clearLadder(guildId);
     res.json({ success: true });
 });
+
 
 // === MODULE EXEMPTION ROUTES ===
 
-// REF-RT-33 — Get exemptions for a specific module
-router.get('/module-exemptions/:guildId/:module', (req, res) => {
+// REF-RT-33
+router.get('/module-exemptions/:guildId/:module', async (req, res) => {
     const { guildId, module } = req.params;
-    res.json(db.getModuleExemptions(guildId, module));
+    res.json(await db.getModuleExemptions(guildId, module));
 });
 
-// REF-RT-34 — Add a module exemption
-router.post('/module-exemptions/:guildId/:module', (req, res) => {
-    const { guildId, module }               = req.params;
-    const { type, target_id, added_by, note } = req.body;
-
-    if (!type || !target_id || !added_by) {
-        return res.status(400).json({ error: 'type, target_id and added_by are required' });
-    }
-
-    if (!['role', 'user', 'channel'].includes(type)) {
-        return res.status(400).json({ error: 'type must be role, user or channel' });
-    }
-
-    db.addModuleExemption(guildId, module, type, target_id, added_by, note || null);
+// REF-RT-34
+router.post('/module-exemptions/:guildId', async (req, res) => {
+    const { guildId } = req.params;
+    const { module, type, target_id, added_by, note } = req.body;
+    if (!type || !target_id) return res.status(400).json({ error: 'type and target_id are required' });
+    if (!['role', 'user', 'channel'].includes(type)) return res.status(400).json({ error: 'type must be role, user or channel' });
+    await db.addModuleExemption(guildId, module, type, target_id, added_by || 'dashboard', note || null);
     res.json({ success: true });
 });
 
-// REF-RT-35 — Remove a module exemption
-router.delete('/module-exemptions/:guildId/:module', (req, res) => {
-    const { guildId, module }  = req.params;
-    const { type, target_id }  = req.body;
-
-    if (!type || !target_id) {
-        return res.status(400).json({ error: 'type and target_id are required' });
-    }
-
-    db.removeModuleExemption(guildId, module, type, target_id);
+// REF-RT-35
+router.delete('/module-exemptions/:guildId', async (req, res) => {
+    const { guildId } = req.params;
+    const { module, type, target_id } = req.body;
+    if (!type || !target_id) return res.status(400).json({ error: 'type and target_id are required' });
+    await db.removeModuleExemption(guildId, module, type, target_id);
     res.json({ success: true });
 });
+
 
 // === PANIC MODE ROUTES ===
 
-// REF-RT-36 — Get panic state for a guild
-router.get('/panic/:guildId', (req, res) => {
+// REF-RT-36
+router.get('/panic/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    const state = db.getPanicState(guildId);
+    const state = await db.getPanicState(guildId);
     res.json(state || { active: 0 });
 });
 
-// REF-RT-37 — Activate panic mode
-router.post('/panic/:guildId/activate', (req, res) => {
-    const { guildId }                    = req.params;
+// REF-RT-37
+router.post('/panic/:guildId/activate', async (req, res) => {
+    const { guildId } = req.params;
     const { triggered_by, channel_snapshot } = req.body;
     if (!triggered_by) return res.status(400).json({ error: 'triggered_by required' });
-    db.setPanicActive(guildId, triggered_by, channel_snapshot || []);
+    await db.setPanicActive(guildId, triggered_by, channel_snapshot || []);
     res.json({ success: true });
 });
 
-// REF-RT-38 — Deactivate panic mode
-router.post('/panic/:guildId/deactivate', (req, res) => {
-    const { guildId }       = req.params;
+// REF-RT-38
+router.post('/panic/:guildId/deactivate', async (req, res) => {
+    const { guildId } = req.params;
     const { deactivated_by } = req.body;
     if (!deactivated_by) return res.status(400).json({ error: 'deactivated_by required' });
-    db.setPanicInactive(guildId, deactivated_by);
+    await db.setPanicInactive(guildId, deactivated_by);
     res.json({ success: true });
 });
+
 
 // === PUNISHMENT LADDER ROUTES ===
 
-// REF-RT-21 — Get ladder for a guild
-router.get('/ladder/:guildId', (req, res) => {
+// REF-RT-21
+router.get('/ladder/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    res.json(db.getLadder(guildId));
+    res.json(await db.getLadder(guildId));
 });
 
-// REF-RT-22 — Set a ladder step
-router.post('/ladder/:guildId', (req, res) => {
+// REF-RT-22
+router.post('/ladder/:guildId', async (req, res) => {
     const { guildId } = req.params;
     const { step, action, duration, duration_unit, custom_dm, reset_after } = req.body;
     if (!step || !action) return res.status(400).json({ error: 'step and action required' });
-    db.setLadderStep(guildId, step, action, duration, duration_unit, custom_dm, reset_after);
+    await db.setLadderStep(guildId, step, action, duration, duration_unit, custom_dm, reset_after);
     res.json({ success: true });
 });
 
-// REF-RT-23 — Delete a ladder step
-router.delete('/ladder/:guildId/:step', (req, res) => {
+// REF-RT-23
+router.delete('/ladder/:guildId/:step', async (req, res) => {
     const { guildId, step } = req.params;
-    db.deleteLadderStep(guildId, parseInt(step));
+    await db.deleteLadderStep(guildId, parseInt(step));
     res.json({ success: true });
 });
 
-// REF-RT-24 — Clear entire ladder for a guild
-router.delete('/ladder/:guildId', (req, res) => {
+// REF-RT-24
+router.delete('/ladder/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    db.clearLadder(guildId);
+    await db.clearLadder(guildId);
     res.json({ success: true });
 });
 
-// REF-RT-25 — Get punishment settings
-router.get('/punishment-settings/:guildId', (req, res) => {
+// REF-RT-25
+router.get('/punishment-settings/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    const settings = db.getPunishmentSettings(guildId);
+    const settings = await db.getPunishmentSettings(guildId);
     res.json(settings || { reset_on_kick: 1, reset_on_ban: 1, per_module: 0 });
 });
 
-// REF-RT-26 — Save punishment settings
-router.post('/punishment-settings/:guildId', (req, res) => {
+// REF-RT-26
+router.post('/punishment-settings/:guildId', async (req, res) => {
     const { guildId } = req.params;
     const { reset_on_kick, reset_on_ban, per_module } = req.body;
-    db.setPunishmentSettings(guildId, reset_on_kick, reset_on_ban, per_module);
+    await db.setPunishmentSettings(guildId, reset_on_kick, reset_on_ban, per_module);
+    res.json({ success: true });
+});
+
+
+// === GUILD CHANNELS & ROLES ===
+
+// REF-RT-39
+router.get('/guild-channels/:guildId', async (req, res) => {
+    const { guildId } = req.params;
+    res.json(await db.getGuildChannels(guildId));
+});
+
+// REF-RT-40
+router.post('/guild-channels/:guildId', async (req, res) => {
+    const { guildId } = req.params;
+    const { channels } = req.body;
+    if (!channels || !Array.isArray(channels)) return res.status(400).json({ error: 'channels array required' });
+    await db.setGuildChannels(guildId, channels);
+    res.json({ success: true });
+});
+
+// REF-RT-41
+router.get('/guild-roles/:guildId', async (req, res) => {
+    const { guildId } = req.params;
+    res.json(await db.getGuildRoles(guildId));
+});
+
+// REF-RT-42
+router.post('/guild-roles/:guildId', async (req, res) => {
+    const { guildId } = req.params;
+    const { roles } = req.body;
+    if (!roles || !Array.isArray(roles)) return res.status(400).json({ error: 'roles array required' });
+    await db.setGuildRoles(guildId, roles);
+    res.json({ success: true });
+});
+
+// REF-RT-43
+router.get('/scheduled-jobs/due', async (req, res) => {
+    res.json(await db.getDueJobs());
+});
+
+// REF-RT-44
+router.patch('/scheduled-jobs/:id/done', async (req, res) => {
+    await db.markJobDone(parseInt(req.params.id));
+    res.json({ success: true });
+});
+
+// REF-RT-45
+router.post('/scheduled-jobs', async (req, res) => {
+    const { guild_id, type, target_id, execute_at, payload } = req.body;
+    if (!guild_id || !type || !target_id || !execute_at) {
+        return res.status(400).json({ error: 'guild_id, type, target_id, execute_at required' });
+    }
+    await db.addScheduledJob(guild_id, type, target_id, execute_at, payload || null);
     res.json({ success: true });
 });
 

@@ -247,7 +247,13 @@ async function loadGuildConfig() {
     if (!State.guildId) return;
     try {
         State.config = await apiGet(`/api/config/${State.guildId}`);
-        const badge  = document.getElementById('test-badge');
+        const [channels, roles] = await Promise.all([
+            loadChannels(State.guildId),
+            loadRoles(State.guildId)
+        ]);
+State.channels = channels;
+        State.roles    = roles;
+        const badge = document.getElementById('test-badge');
         State.config.test_mode ? badge.classList.remove('hidden') : badge.classList.add('hidden');
     } catch(e) { console.error(e); }
 }
@@ -287,7 +293,7 @@ async function checkPennyStatus() {
 // REF-CORE-18
 const SECTIONS = {
     overview:     { label: 'Dashboard',          tabs: ['Summary', 'Activity'],                     render: (t) => renderOverview(t)    },
-    security:     { label: 'Auto-Mod',           tabs: ['Modules', 'Thresholds', 'Bad Words'],      render: (t) => renderSecurity(t)    },
+    security: { label: 'Auto-Mod', tabs: ['General', 'Spam', 'Bad Words', 'Caps', 'Mentions', 'Links', 'Other'], render: (t) => renderSecurity(t) },
     secoverview:  { label: 'Security Overview',  tabs: ['Overview'],                                render: (t) => renderSecOverview(t)  },
     secspam:      { label: 'Spam Detection',     tabs: ['Settings', 'Exemptions'],                  render: (t) => renderSecSpam(t)      },
     secraid:      { label: 'Anti-Raid',          tabs: ['Settings', 'Exemptions'],                  render: (t) => renderSecRaid(t)      },
@@ -304,8 +310,8 @@ const SECTIONS = {
     sechoist:     { label: 'Anti-Hoist',         tabs: ['Settings', 'Exemptions'],                  render: (t) => renderSecHoist(t)     },
     antinuke:     { label: 'Anti-Nuke',          tabs: ['Settings', 'Exemptions'],                                render: (t) => renderSecAntiNuke(t)  },
     panicmode:    { label: 'Panic Mode',         tabs: ['Settings'],                                render: (t) => renderPanicMode(t)    },
-    verification: { label: 'Verification',       tabs: ['Settings'],                                render: (t) => renderComingSoon(t)   },
-    joingate:     { label: 'Join Gate',          tabs: ['Settings'],                                render: (t) => renderComingSoon(t)   },
+    verification: { label: 'Verification',       tabs: ['Settings'],                                render: (t) => renderVerification(t) },
+    joingate: { label: 'Join Gate', tabs: ['Settings', 'Exemptions'], render: (t) => renderJoinGate(t) },
     modlog:       { label: 'Mod Log',            tabs: ['Mod Log'],                                 render: (t) => renderModLog(t)       },
     warnings:     { label: 'Warnings',           tabs: ['Warnings'],                                render: (t) => renderWarnings(t)     },
     punishments:  { label: 'Punishment Ladder',  tabs: ['Ladder'],                                  render: (t) => renderPunishments(t)  },
@@ -346,7 +352,13 @@ function setSection(section) {
     document.getElementById('page-title').textContent = def.label || section;
     openGroupForSection(section);
 
-    loadGuildConfig().then(() => {
+loadGuildConfig().then(() => {
+        ALL_GROUPS.forEach(g => {
+            document.getElementById(`children-${g}`)?.classList.remove('open');
+            document.getElementById(`chevron-${g}`)?.classList.remove('open');
+            document.getElementById(`group-${g}`)?.querySelector('.nav-group-header')?.classList.remove('open');
+        });
+        openGroupForSection(section);
         renderSubnav();
         renderContent();
     });
@@ -379,9 +391,47 @@ function renderSubnav() {
 
 // REF-CORE-22
 function renderContent() {
-    SECTIONS[State.section].render(State.tab);
+    const el = document.getElementById('content');
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(6px)';
+    Promise.resolve(SECTIONS[State.section].render(State.tab)).then(() => {
+        requestAnimationFrame(() => {
+            el.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+            el.style.opacity = '1';
+            el.style.transform = 'translateY(0)';
+        });
+    }).catch(console.error);
 }
 
+// === CHANNEL & ROLE LOADERS ===
+async function loadChannels(guildId) {
+    try {
+        const res = await apiGet(`/api/guild-channels/${guildId}`);
+        return res || [];
+    } catch { return []; }
+}
+
+async function loadRoles(guildId) {
+    try {
+        const res = await apiGet(`/api/guild-roles/${guildId}`);
+        return res || [];
+    } catch { return []; }
+}
+
+function channelSelect(id, channels, currentValue, types = null) {
+    const filtered = types ? channels.filter(c => types.includes(parseInt(c.type))) : channels;
+    return `<select id="${id}" style="width:220px">
+        <option value="">— Select channel —</option>
+        ${filtered.map(c => `<option value="${c.channel_id}" ${currentValue == c.channel_id ? 'selected' : ''}>#${c.name}</option>`).join('')}
+    </select>`;
+}
+
+function roleSelect(id, roles, currentValue, multiple = false) {
+    return `<select id="${id}" style="width:220px">
+        <option value="">— Select role —</option>
+        ${roles.filter(r => r.name !== '@everyone').map(r => `<option value="${r.role_id}" ${currentValue == r.role_id ? 'selected' : ''}>@${r.name}</option>`).join('')}
+    </select>`;
+}
 
 // ============================================================
 // INITIALISATION

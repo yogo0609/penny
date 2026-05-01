@@ -10,11 +10,12 @@
 // ============================================================
 
 // REF-SET-02
-function renderSettings(tab) {
+async function renderSettings(tab) {
     const el = document.getElementById('content');
     const c  = State.config;
 
     if (tab === 'General') {
+        const channels = await loadChannels(State.guildId);
         el.innerHTML = `
             <div class="card">
                 <div class="card-header"><div class="card-title">General</div></div>
@@ -30,10 +31,10 @@ function renderSettings(tab) {
                 </div>
                 <div class="toggle-row">
                     <div class="toggle-info">
-                        <div class="toggle-name">Log Channel ID</div>
+                        <div class="toggle-name">Log Channel</div>
                         <div class="toggle-desc">Channel where Penny posts moderation actions</div>
                     </div>
-                    <input id="log_channel_id" value="${c.log_channel_id || ''}" placeholder="Channel ID" style="width:220px">
+                    ${channelSelect('log_channel_id', channels, c.log_channel_id, [0])}
                 </div>
                 <div class="toggle-row">
                     <div class="toggle-info">

@@ -68,7 +68,7 @@ function secModuleCard(title, desc, enabledKey, actionKey, thresholds, extra, mo
                         <div class="toggle-name">Type</div>
                         <div class="toggle-desc">What you are exempting</div>
                     </div>
-                    <select id="me-type-${module}" style="width:160px">
+                    <select id="me-type-${module}" style="width:160px" onchange="filterExemptionId('${module}', this.value)">
                         <option value="role">Role</option>
                         <option value="user">User</option>
                         <option value="channel">Channel</option>
@@ -79,7 +79,11 @@ function secModuleCard(title, desc, enabledKey, actionKey, thresholds, extra, mo
                         <div class="toggle-name">ID</div>
                         <div class="toggle-desc">Role, user or channel ID</div>
                     </div>
-                    <input id="me-id-${module}" placeholder="e.g. 123456789012345678" style="width:220px">
+                    <select id="me-id-${module}" style="width:220px">
+                        <option value="">— Select —</option>
+                        ${(State.roles||[]).filter(r=>r.name!=='@everyone').map(r=>`<option value="${r.role_id}" data-t="role">@${r.name}</option>`).join('')}
+                        ${(State.channels||[]).filter(c=>parseInt(c.type)===0).map(c=>`<option value="${c.channel_id}" data-t="channel">#${c.name}</option>`).join('')}
+                    </select>
                 </div>
                 <div class="toggle-row">
                     <div class="toggle-info">
@@ -150,6 +154,9 @@ function renderSecOverview() {
         { key: 'newline_enabled',      name: 'Newline Spam',      section: 'secnewline',  desc: 'Line break spam detection'     },
         { key: 'zalgo_enabled',        name: 'Zalgo Text',        section: 'seczalgo',    desc: 'Corrupted text detection'      },
         { key: 'antihoist_enabled',    name: 'Anti-Hoist',        section: 'sechoist',    desc: 'Username hoist prevention'     },
+        { key: 'joingate_avatar_enabled',    name: 'Join Gate: Avatar',    section: 'secjoingateavatar',    desc: 'Block users with default avatar'    },
+        { key: 'joingate_username_enabled',  name: 'Join Gate: Username',  section: 'secjoingateusername',  desc: 'Block suspicious usernames'         },
+        { key: 'joingate_rejoin_enabled',    name: 'Join Gate: Rejoin',    section: 'secjoingaterejoin',    desc: 'Block rapid rejoins'                },
     ];
 
     const active = modules.filter(m => c[m.key]).length;
@@ -189,67 +196,297 @@ function renderSecOverview() {
         </div>`;
 }
 
+function filterExemptionId(module, type) {
+    const sel = document.getElementById(`me-id-${module}`);
+    if (!sel) return;
+    Array.from(sel.options).forEach(opt => {
+        if (!opt.value) return;
+        opt.hidden = type !== 'user' && opt.dataset.t && opt.dataset.t !== type;
+    });
+    sel.value = '';
+    sel.style.display = type === 'user' ? 'none' : '';
+    let userInput = document.getElementById(`me-id-user-${module}`);
+    if (type === 'user') {
+        if (!userInput) {
+            userInput = document.createElement('input');
+            userInput.id = `me-id-user-${module}`;
+            userInput.placeholder = 'User ID';
+            userInput.style.width = '220px';
+            sel.parentNode.appendChild(userInput);
+        }
+        userInput.style.display = '';
+    } else {
+        if (userInput) userInput.style.display = 'none';
+    }
+}
 
 // ============================================================
 // MODULE RENDERERS
 // ============================================================
 
 // REF-SEC-07
-function renderSecurity(tab) { renderProtection(tab); }
-
-// REF-SEC-08
-function renderProtection(tab) {
+function renderSecurity(tab) {
     const el = document.getElementById('content');
     const c  = State.config;
 
-    if (tab === 'Modules') {
+    if (tab === 'General') {
+        const modules = [
+            { key: 'spam_enabled',         name: 'Spam Detection',    desc: 'Rate-limit messages per user',          action: 'spam_action'         },
+            { key: 'badwords_enabled',      name: 'Bad Word Filter',   desc: 'Block prohibited words and phrases',    action: 'badwords_action'     },
+            { key: 'caps_enabled',          name: 'Caps Filter',       desc: 'Limit excessive capital letters',       action: 'caps_action'         },
+            { key: 'mass_mention_enabled',  name: 'Mass Mention',      desc: 'Prevent mention spam',                  action: 'mass_mention_action' },
+            { key: 'antilink_enabled',      name: 'Anti-Invite Links', desc: 'Block Discord invite links',            action: 'antilink_action'     },
+            { key: 'antilink_all_enabled',  name: 'Anti-Link',         desc: 'Block all URLs',                        action: 'antilink_all_action' },
+            { key: 'repeat_enabled',        name: 'Repeated Text',     desc: 'Detect copypasta and repeated content', action: 'repeat_action'       },
+            { key: 'emojispam_enabled',     name: 'Emoji Spam',        desc: 'Limit excessive emoji usage',           action: 'emojispam_action'    },
+            { key: 'newline_enabled',       name: 'Newline Spam',      desc: 'Limit excessive line breaks',           action: 'newline_action'      },
+            { key: 'zalgo_enabled',         name: 'Zalgo Text',        desc: 'Remove corrupted/glitched text',        action: 'zalgo_action'        },
+            { key: 'antihoist_enabled',     name: 'Anti-Hoist',        desc: 'Fix usernames starting with symbols',   action: null                  },
+            { key: 'accountage_enabled',    name: 'Account Age Gate',  desc: 'Kick new accounts below minimum age',   action: null                  },
+        ];
+
+        const active = modules.filter(m => c[m.key]).length;
+
         el.innerHTML = `
+            <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
+                <div class="stat-card blue">
+                    <div class="stat-label">Active Filters</div>
+                    <div class="stat-value">${active}<span style="font-size:14px;color:var(--text2)">/${modules.length}</span></div>
+                </div>
+                <div class="stat-card gold">
+                    <div class="stat-label">Inactive</div>
+                    <div class="stat-value">${modules.length - active}</div>
+                </div>
+                <div class="stat-card ${active === modules.length ? 'green' : active > modules.length / 2 ? 'gold' : 'red'}">
+                    <div class="stat-label">Coverage</div>
+                    <div class="stat-value">${Math.round((active / modules.length) * 100)}%</div>
+                </div>
+            </div>
             <div class="card">
-                <div class="card-header"><div class="card-title">Modules</div></div>
-                ${moduleRow('spam_enabled',         'Spam Detection',    'spam_action',         c)}
-                ${moduleRow('raid_enabled',         'Anti-Raid',         'raid_action',         c)}
-                ${moduleRow('badwords_enabled',     'Bad Word Filter',   'badwords_action',     c)}
-                ${moduleRow('caps_enabled',         'Caps Lock Filter',  'caps_action',         c)}
-                ${moduleRow('mass_mention_enabled', 'Mass Mention',      'mass_mention_action', c)}
-                ${moduleRow('antilink_enabled',     'Anti-Invite Links', 'antilink_action',     c)}
-                ${moduleRow('accountage_enabled',   'Account Age Gate',  null,                  c)}
+                <div class="card-header">
+                    <div class="card-title">All Filters</div>
+                    <div class="card-desc">Enable or disable each filter. Click a tab above to configure thresholds and exemptions.</div>
+                </div>
+                ${modules.map(m => `
+                    <div class="toggle-row">
+                        <div class="toggle-info">
+                            <div class="toggle-name">${m.name}</div>
+                            <div class="toggle-desc">${m.desc}</div>
+                        </div>
+                        <div class="toggle-right" style="gap:12px">
+                            ${m.action ? `<span class="action-pill" onclick="cycleAction(this,'${m.action}')" title="Click to change action">${c[m.action] || 'ladder'}</span>` : ''}
+                            <label class="toggle">
+                                <input type="checkbox" ${c[m.key] ? 'checked' : ''} onchange="toggleModule('${m.key}', this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>`).join('')}
             </div>`;
     }
 
-    if (tab === 'Thresholds') {
-        el.innerHTML = `
-            <div class="card">
-                <div class="card-header"><div class="card-title">Thresholds</div></div>
-                ${thrRow('spam_max_messages',   'Spam — max messages',      c.spam_max_messages   || 5,     'messages')}
-                ${thrRow('spam_window_ms',      'Spam — window',            c.spam_window_ms      || 5000,  'ms')}
-                ${thrRow('raid_max_joins',      'Raid — max joins',         c.raid_max_joins      || 5,     'joins')}
-                ${thrRow('raid_window_ms',      'Raid — window',            c.raid_window_ms      || 10000, 'ms')}
-                ${thrRow('caps_threshold',      'Caps — threshold',         c.caps_threshold      || 0.7,   '%')}
-                ${thrRow('caps_min_length',     'Caps — min length',        c.caps_min_length     || 10,    'chars')}
-                ${thrRow('mass_mention_max',    'Mass mention — max',       c.mass_mention_max    || 5,     'mentions')}
-                ${thrRow('accountage_min_days', 'Account age — minimum',    c.accountage_min_days || 7,     'days')}
-                ${thrRow('max_warnings',        'Max warnings before kick', c.max_warnings        || 3,     'warnings')}
-                <div class="card-footer">
-                    <button class="btn-primary" onclick="saveProtection()">Save</button>
+    if (tab === 'Spam') {
+        el.innerHTML = secModuleCard(
+            'Spam Detection',
+            'Detects users sending too many messages in a short window. The bot tracks message timestamps per user and triggers when the rate exceeds your threshold.',
+            'spam_enabled', 'spam_action',
+            `<div class="toggle-row">
+                <div class="toggle-info"><div class="toggle-name">Max messages</div><div class="toggle-desc">Messages allowed in the time window before triggering</div></div>
+                <div class="toggle-right" style="gap:8px">
+                    <input type="number" value="${c.spam_max_messages || 5}" data-key="spam_max_messages" style="width:90px;text-align:right">
+                    <span style="font-size:11px;color:var(--text3)">messages</span>
                 </div>
-            </div>`;
+            </div>
+            <div class="toggle-row">
+                <div class="toggle-info"><div class="toggle-name">Time window</div><div class="toggle-desc">Rolling window in milliseconds (5000 = 5 seconds)</div></div>
+                <div class="toggle-right" style="gap:8px">
+                    <input type="number" value="${c.spam_window_ms || 5000}" data-key="spam_window_ms" style="width:90px;text-align:right">
+                    <span style="font-size:11px;color:var(--text3)">ms</span>
+                </div>
+            </div>`,
+            null, 'spam'
+        );
     }
 
     if (tab === 'Bad Words') {
-        const words = State.config.badwords_list || [];
+        const words = c.badwords_list || [];
         el.innerHTML = `
-            <div class="card">
-                <div class="card-header"><div class="card-title">Bad Words</div></div>
-                <div class="word-grid" id="word-grid">
-                    ${words.map(w => wordTag(w)).join('') || '<span style="color:var(--text3);font-size:13px;padding:4px">No words added</span>'}
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+                <div class="card">
+                    <div class="toggle-row">
+                        <div class="toggle-info">
+                            <div class="toggle-name">Bad Word Filter</div>
+                            <div class="toggle-desc">Detects and acts on messages containing prohibited words or phrases</div>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="badwords_enabled" ${c.badwords_enabled ? 'checked' : ''} onchange="saveSecToggle('badwords_enabled', this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="toggle-row">
+                        <div class="toggle-info"><div class="toggle-name">Action</div><div class="toggle-desc">What Penny does when triggered</div></div>
+                        <div class="toggle-right">${secActionSelect('badwords_action', c.badwords_action)}</div>
+                    </div>
+                    <div class="card-footer">
+                        <button class="btn-primary" onclick="saveSecModule('badwords_enabled','badwords_action',[])">Save</button>
+                    </div>
                 </div>
-                <div class="word-add">
-                    <input class="word-input" id="word-input" placeholder="Add a word...">
-                    <button class="btn-primary btn-sm" onclick="addBadWord()">Add</button>
+                <div class="card">
+                    <div class="card-header"><div class="card-title">Word List</div></div>
+                    <div class="word-grid" id="word-grid">
+                        ${words.map(w => wordTag(w)).join('') || '<span style="color:var(--text3);font-size:13px;padding:4px">No words added yet</span>'}
+                    </div>
+                    <div class="word-add">
+                        <input class="word-input" id="word-input" placeholder="Add a word or phrase...">
+                        <button class="btn-primary btn-sm" onclick="addBadWord()">Add</button>
+                    </div>
                 </div>
+            </div>
+            <div style="margin-top:14px">
+                ${secModuleCard('', '', 'badwords_enabled', null, null, null, 'badwords').replace(/<div style="display:grid.*?<div class="card">/, '<div>').split('</div>').slice(-3).join('</div>')}
+            </div>`;
+
+        // Simpler exemptions — just show the exemption card
+        el.innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+                <div>
+                    <div class="card" style="margin-bottom:14px">
+                        <div class="toggle-row">
+                            <div class="toggle-info">
+                                <div class="toggle-name">Bad Word Filter</div>
+                                <div class="toggle-desc">Detects and acts on messages containing prohibited words or phrases</div>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="badwords_enabled" ${c.badwords_enabled ? 'checked' : ''} onchange="saveSecToggle('badwords_enabled', this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="toggle-row">
+                            <div class="toggle-info"><div class="toggle-name">Action</div><div class="toggle-desc">What Penny does when triggered</div></div>
+                            <div class="toggle-right">${secActionSelect('badwords_action', c.badwords_action)}</div>
+                        </div>
+                        <div class="card-footer">
+                            <button class="btn-primary" onclick="saveSecModule('badwords_enabled','badwords_action',[])">Save</button>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><div class="card-title">Word List</div></div>
+                        <div class="word-grid" id="word-grid">
+                            ${words.map(w => wordTag(w)).join('') || '<span style="color:var(--text3);font-size:13px;padding:4px">No words added yet</span>'}
+                        </div>
+                        <div class="word-add">
+                            <input class="word-input" id="word-input" placeholder="Add a word or phrase...">
+                            <button class="btn-primary btn-sm" onclick="addBadWord()">Add</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="toggle-row" style="border-bottom:1px solid var(--border)">
+                        <div class="toggle-info"><div class="toggle-name">Exemptions</div><div class="toggle-desc">Roles, users and channels exempt from bad word filter</div></div>
+                    </div>
+                    <div class="toggle-row">
+                        <div class="toggle-info"><div class="toggle-name">Type</div></div>
+                        <select id="me-type-badwords" style="width:160px" onchange="filterExemptionId('badwords', this.value)">
+                            <option value="role">Role</option><option value="user">User</option><option value="channel">Channel</option>
+                        </select>
+                    </div>
+                    <div class="toggle-row">
+                        <div class="toggle-info"><div class="toggle-name">ID</div></div>
+                        <select id="me-id-badwords" style="width:220px">
+                            <option value="">— Select —</option>
+                            ${(State.roles||[]).filter(r=>r.name!=='@everyone').map(r=>`<option value="${r.role_id}" data-t="role">@${r.name}</option>`).join('')}
+                            ${(State.channels||[]).filter(ch=>parseInt(ch.type)===0).map(ch=>`<option value="${ch.channel_id}" data-t="channel">#${ch.name}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="toggle-row">
+                        <div class="toggle-info"><div class="toggle-name">Note</div></div>
+                        <input id="me-note-badwords" placeholder="Reason" style="width:220px">
+                    </div>
+                    <div class="card-footer">
+                        <button class="btn-primary" onclick="addModuleExemption('badwords')">Add</button>
+                    </div>
+                    <div id="me-exemptions-badwords" style="padding:8px 0"></div>
+                </div>
+            </div>`;
+        loadModuleExemptions('badwords');
+    }
+
+    if (tab === 'Caps') {
+        el.innerHTML = secModuleCard(
+            'Caps Filter',
+            'Detects messages with an excessive ratio of capital letters. Only applies to messages longer than the minimum length.',
+            'caps_enabled', 'caps_action',
+            `<div class="toggle-row">
+                <div class="toggle-info"><div class="toggle-name">Caps threshold</div><div class="toggle-desc">Ratio of caps to trigger — 0.7 means 70% capitals</div></div>
+                <div class="toggle-right" style="gap:8px">
+                    <input type="number" value="${c.caps_threshold || 0.7}" data-key="caps_threshold" step="0.1" min="0.1" max="1" style="width:90px;text-align:right">
+                    <span style="font-size:11px;color:var(--text3)">ratio</span>
+                </div>
+            </div>
+            <div class="toggle-row">
+                <div class="toggle-info"><div class="toggle-name">Minimum length</div><div class="toggle-desc">Message must be at least this many characters</div></div>
+                <div class="toggle-right" style="gap:8px">
+                    <input type="number" value="${c.caps_min_length || 10}" data-key="caps_min_length" style="width:90px;text-align:right">
+                    <span style="font-size:11px;color:var(--text3)">chars</span>
+                </div>
+            </div>`,
+            null, 'caps'
+        );
+    }
+
+    if (tab === 'Mentions') {
+        el.innerHTML = secModuleCard(
+            'Mass Mention',
+            'Detects messages that mention too many users or roles at once. Both @user and @role mentions are counted.',
+            'mass_mention_enabled', 'mass_mention_action',
+            `<div class="toggle-row">
+                <div class="toggle-info"><div class="toggle-name">Max mentions</div><div class="toggle-desc">Total mentions (users + roles) allowed per message</div></div>
+                <div class="toggle-right" style="gap:8px">
+                    <input type="number" value="${c.mass_mention_max || 5}" data-key="mass_mention_max" style="width:90px;text-align:right">
+                    <span style="font-size:11px;color:var(--text3)">mentions</span>
+                </div>
+            </div>`,
+            null, 'mass_mention'
+        );
+    }
+
+    if (tab === 'Links') {
+        el.innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                ${secModuleCard('Anti-Invite Links', 'Blocks Discord invite links (discord.gg/...). Use this if you want to allow regular URLs but not server invites.', 'antilink_enabled', 'antilink_action', null, null, 'antilink')}
+                ${secModuleCard('Anti-Link', 'Blocks all URLs posted in the server. More aggressive than Anti-Invite — catches any http:// or https:// link.', 'antilink_all_enabled', 'antilink_all_action', null, null, 'antilink_all')}
+            </div>`;
+    }
+
+    if (tab === 'Other') {
+        el.innerHTML = `
+            <div style="display:flex;flex-direction:column;gap:14px">
+                ${secModuleCard('Repeated Text', 'Detects copypasta and messages with excessive word repetition. Uses a ratio — 0.7 means 70% of words are repeated.', 'repeat_enabled', 'repeat_action',
+                    `<div class="toggle-row">
+                        <div class="toggle-info"><div class="toggle-name">Min length</div><div class="toggle-desc">Minimum characters before checking</div></div>
+                        <div class="toggle-right" style="gap:8px"><input type="number" value="${c.repeat_min_length || 20}" data-key="repeat_min_length" style="width:90px;text-align:right"><span style="font-size:11px;color:var(--text3)">chars</span></div>
+                    </div>
+                    <div class="toggle-row">
+                        <div class="toggle-info"><div class="toggle-name">Repeat threshold</div><div class="toggle-desc">Ratio of repeated words to trigger</div></div>
+                        <div class="toggle-right" style="gap:8px"><input type="number" value="${c.repeat_threshold || 0.7}" data-key="repeat_threshold" step="0.1" min="0.1" max="1" style="width:90px;text-align:right"><span style="font-size:11px;color:var(--text3)">ratio</span></div>
+                    </div>`, null, 'repeat')}
+                ${secModuleCard('Emoji Spam', 'Detects messages with too many emojis. Counts both standard Unicode emoji and custom Discord emoji.', 'emojispam_enabled', 'emojispam_action',
+                    `<div class="toggle-row">
+                        <div class="toggle-info"><div class="toggle-name">Max emojis</div><div class="toggle-desc">Emoji count allowed per message</div></div>
+                        <div class="toggle-right" style="gap:8px"><input type="number" value="${c.emojispam_max || 5}" data-key="emojispam_max" style="width:90px;text-align:right"><span style="font-size:11px;color:var(--text3)">emojis</span></div>
+                    </div>`, null, 'emojispam')}
+                ${secModuleCard('Newline Spam', 'Detects messages with excessive line breaks, used to flood chat or hide content.', 'newline_enabled', 'newline_action',
+                    `<div class="toggle-row">
+                        <div class="toggle-info"><div class="toggle-name">Max lines</div><div class="toggle-desc">Line breaks allowed per message</div></div>
+                        <div class="toggle-right" style="gap:8px"><input type="number" value="${c.newline_max || 10}" data-key="newline_max" style="width:90px;text-align:right"><span style="font-size:11px;color:var(--text3)">lines</span></div>
+                    </div>`, null, 'newline')}
+                ${secModuleCard('Zalgo Text', 'Detects and removes corrupted or glitched-looking text created with Unicode combining characters.', 'zalgo_enabled', 'zalgo_action', null, null, 'zalgo')}
+                ${secModuleCard('Anti-Hoist', 'Renames users whose display name starts with special characters (!@# etc) that push them to the top of the member list.', 'antihoist_enabled', null, null, null, 'antihoist')}
             </div>`;
     }
 }
+
+// REF-SEC-08 — kept as alias for backward compatibility
+function renderProtection(tab) { renderSecurity(tab); }
 
 // REF-SEC-09
 function moduleRow(key, name, actionKey, config) {
@@ -375,7 +612,7 @@ function renderSecSpam(tab) {
             </div>
             <div class="toggle-right" style="gap:8px">
                 <input type="number" value="${c.spam_max_messages || 5}" data-key="spam_max_messages" style="width:90px;text-align:right">
-                <span style="font-size:11px;color:var(--text3)">messages</span>
+                <span style="font-size:11px;color:var(--text3)"></span>
             </div>
         </div>
         <div class="toggle-row">
@@ -385,7 +622,7 @@ function renderSecSpam(tab) {
             </div>
             <div class="toggle-right" style="gap:8px">
                 <input type="number" value="${c.spam_window_ms || 5000}" data-key="spam_window_ms" style="width:90px;text-align:right">
-                <span style="font-size:11px;color:var(--text3)">ms</span>
+                <span style="font-size:11px;color:var(--text3)"></span>
             </div>
         </div>`,
         null, 'spam'
@@ -408,7 +645,7 @@ function renderSecRaid(tab) {
             </div>
             <div class="toggle-right" style="gap:8px">
                 <input type="number" value="${c.raid_max_joins || 5}" data-key="raid_max_joins" style="width:90px;text-align:right">
-                <span style="font-size:11px;color:var(--text3)">joins</span>
+                <span style="font-size:11px;color:var(--text3)"></span>
             </div>
         </div>
         <div class="toggle-row">
@@ -418,7 +655,7 @@ function renderSecRaid(tab) {
             </div>
             <div class="toggle-right" style="gap:8px">
                 <input type="number" value="${c.raid_window_ms || 10000}" data-key="raid_window_ms" style="width:90px;text-align:right">
-                <span style="font-size:11px;color:var(--text3)">ms</span>
+                <span style="font-size:11px;color:var(--text3)"></span>
             </div>
         </div>`,
         null, 'raid'
@@ -470,7 +707,7 @@ function renderSecCaps(tab) {
             </div>
             <div class="toggle-right" style="gap:8px">
                 <input type="number" value="${c.caps_threshold || 0.7}" data-key="caps_threshold" step="0.1" min="0.1" max="1" style="width:90px;text-align:right">
-                <span style="font-size:11px;color:var(--text3)">ratio</span>
+                <span style="font-size:11px;color:var(--text3)"></span>
             </div>
         </div>
         <div class="toggle-row">
@@ -480,7 +717,7 @@ function renderSecCaps(tab) {
             </div>
             <div class="toggle-right" style="gap:8px">
                 <input type="number" value="${c.caps_min_length || 10}" data-key="caps_min_length" style="width:90px;text-align:right">
-                <span style="font-size:11px;color:var(--text3)">chars</span>
+                <span style="font-size:11px;color:var(--text3)"></span>
             </div>
         </div>`,
         null, 'caps'
@@ -503,7 +740,7 @@ function renderSecMention(tab) {
             </div>
             <div class="toggle-right" style="gap:8px">
                 <input type="number" value="${c.mass_mention_max || 5}" data-key="mass_mention_max" style="width:90px;text-align:right">
-                <span style="font-size:11px;color:var(--text3)">mentions</span>
+                <span style="font-size:11px;color:var(--text3)"></span>
             </div>
         </div>`,
         null, 'mass_mention'
@@ -538,11 +775,172 @@ function renderSecAge(tab) {
             </div>
             <div class="toggle-right" style="gap:8px">
                 <input type="number" value="${c.accountage_min_days || 7}" data-key="accountage_min_days" style="width:90px;text-align:right">
-                <span style="font-size:11px;color:var(--text3)">days</span>
+                <span style="font-size:11px;color:var(--text3)"></span>
             </div>
         </div>`,
         null, 'accountage'
     );
+}
+
+// === JOIN GATE: AVATAR/USERNAME/REJOIN ===
+function renderJoinGate(tab) {
+    if (tab === 'Exemptions') { renderModuleExemptionsTab('joingate'); return; }
+    const c = State.config;
+    document.getElementById('content').innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+            <div class="card">
+                <div class="toggle-row" style="border-bottom:1px solid var(--border)">
+                    <div class="toggle-info">
+                        <div class="toggle-name">Join Gate</div>
+                        <div class="toggle-desc">Configure which filters are active on member join</div>
+                    </div>
+                </div>
+                <div class="toggle-row">
+                    <div class="toggle-info">
+                        <div class="toggle-name">Default Avatar Filter</div>
+                        <div class="toggle-desc">Kick users with no profile picture</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="joingate_avatar_enabled" ${c.joingate_avatar_enabled ? 'checked' : ''} onchange="saveSecToggle('joingate_avatar_enabled', this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="toggle-row">
+                    <div class="toggle-info">
+                        <div class="toggle-name">Username Filter</div>
+                        <div class="toggle-desc">Kick users with suspicious usernames</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="joingate_username_enabled" ${c.joingate_username_enabled ? 'checked' : ''} onchange="saveSecToggle('joingate_username_enabled', this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="toggle-row">
+                    <div class="toggle-info">
+                        <div class="toggle-name">Rapid Rejoin Detection</div>
+                        <div class="toggle-desc">Kick users who rejoin too quickly</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="joingate_rejoin_enabled" ${c.joingate_rejoin_enabled ? 'checked' : ''} onchange="saveSecToggle('joingate_rejoin_enabled', this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="toggle-row">
+                    <div class="toggle-info">
+                        <div class="toggle-name">Rejoin window</div>
+                        <div class="toggle-desc">Minutes before a rejoin is flagged</div>
+                    </div>
+                    <div class="toggle-right" style="gap:8px">
+                        <input type="number" value="${c.joingate_rejoin_minutes || 10}" data-key="joingate_rejoin_minutes" style="width:90px;text-align:right">
+                        <span style="font-size:11px;color:var(--text3)"></span>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <button class="btn-primary" onclick="saveSecModule('joingate_avatar_enabled', null, ['joingate_username_enabled','joingate_rejoin_enabled','joingate_rejoin_minutes'])">Save</button>
+                </div>
+            </div>
+            <div class="card">
+                <div class="toggle-row" style="border-bottom:1px solid var(--border)">
+                    <div class="toggle-info">
+                        <div class="toggle-name">Exemptions</div>
+                        <div class="toggle-desc">Users, roles or channels exempt from join gate filters</div>
+                    </div>
+                </div>
+                <div class="toggle-row">
+                    <div class="toggle-info">
+                        <div class="toggle-name">Type</div>
+                        <div class="toggle-desc">What you are exempting</div>
+                    </div>
+                    <select id="jg-exempt-type" style="width:160px">
+                        <option value="role">Role</option>
+                        <option value="user">User</option>
+                        <option value="channel">Channel</option>
+                    </select>
+                </div>
+                <div class="toggle-row">
+                    <div class="toggle-info">
+                        <div class="toggle-name">ID</div>
+                        <div class="toggle-desc">Role, user or channel ID</div>
+                    </div>
+                    <input id="jg-exempt-id" placeholder="e.g. 123456789012345678" style="width:220px">
+                </div>
+                <div class="toggle-row">
+                    <div class="toggle-info">
+                        <div class="toggle-name">Note</div>
+                        <div class="toggle-desc">Reason for this exemption</div>
+                    </div>
+                    <input id="jg-exempt-note" placeholder="e.g. Staff role" style="width:220px">
+                </div>
+                <div class="toggle-row">
+                    <div class="toggle-info">
+                        <div class="toggle-name">Join Gate Function</div>
+                        <div class="toggle-desc">Which filter to exempt from</div>
+                    </div>
+                    <select id="jg-exempt-module" style="width:160px">
+                        <option value="joingate_avatar">Avatar Filter</option>
+                        <option value="joingate_username">Username Filter</option>
+                        <option value="joingate_rejoin">Rapid Rejoin</option>
+                    </select>
+                </div>
+                <div class="card-footer">
+                    <button class="btn-primary" onclick="addJoinGateExemption()">Save</button>
+                </div>
+                <div id="jg-exempt-table" style="padding:0 0 0px"></div>
+            </div>
+        </div>`;
+    loadJoinGateExemptions();
+}
+
+async function addJoinGateExemption() {
+    const guildId = State.guild;
+    const type   = document.getElementById('jg-exempt-type').value;
+    const id     = document.getElementById('jg-exempt-id').value.trim();
+    const note   = document.getElementById('jg-exempt-note').value.trim();
+    const module = document.getElementById('jg-exempt-module').value;
+    if (!id) return;
+    await fetch(`${API}/api/module-exemptions/${guildId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
+        body: JSON.stringify({ module, type, target_id: id, note })
+    });
+    document.getElementById('jg-exempt-id').value = '';
+    document.getElementById('jg-exempt-note').value = '';
+    loadJoinGateExemptions();
+}
+
+async function loadJoinGateExemptions() {
+    const guildId = State.guild;
+    const modules = ['joingate_avatar', 'joingate_username', 'joingate_rejoin'];
+    const labels  = { joingate_avatar: 'Avatar Filter', joingate_username: 'Username Filter', joingate_rejoin: 'Rapid Rejoin' };
+    let rows = [];
+    for (const mod of modules) {
+        const res  = await fetch(`${API}/api/module-exemptions/${guildId}/${mod}`, { headers: { 'Authorization': `Bearer ${State.token}` } });
+        const data = await res.json();
+        rows = rows.concat((data.exemptions || []).map(e => ({ ...e, mod })));
+    }
+    const table = document.getElementById('jg-exempt-table');
+    if (!table) return;
+    if (!rows.length) { table.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:8px">No exemptions yet</div>'; return; }
+    table.innerHTML = `<table class="data-table">
+        <thead><tr><th>Function</th><th>Type</th><th>ID</th><th>Note</th><th></th></tr></thead>
+        <tbody>${rows.map(e => `<tr>
+            <td>${labels[e.mod] || e.mod}</td>
+            <td>${e.type}</td>
+            <td>${e.target_id}</td>
+            <td>${e.note || ''}</td>
+            <td><button class="btn-danger btn-sm" onclick="removeJoinGateExemption('${e.mod}','${e.target_id}')">Remove</button></td>
+        </tr>`).join('')}</tbody>
+    </table>`;
+}
+
+async function removeJoinGateExemption(mod, targetId) {
+    const guildId = State.guild;
+    await fetch(`${API}/api/module-exemptions/${guildId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
+        body: JSON.stringify({ module: mod, target_id: targetId })
+    });
+    loadJoinGateExemptions();
 }
 
 // REF-SEC-24
@@ -573,7 +971,7 @@ function renderSecRepeat(tab) {
             </div>
             <div class="toggle-right" style="gap:8px">
                 <input type="number" value="${c.repeat_min_length || 20}" data-key="repeat_min_length" style="width:90px;text-align:right">
-                <span style="font-size:11px;color:var(--text3)">chars</span>
+                <span style="font-size:11px;color:var(--text3)"></span>
             </div>
         </div>
         <div class="toggle-row">
@@ -583,7 +981,7 @@ function renderSecRepeat(tab) {
             </div>
             <div class="toggle-right" style="gap:8px">
                 <input type="number" value="${c.repeat_threshold || 0.7}" data-key="repeat_threshold" step="0.1" min="0.1" max="1" style="width:90px;text-align:right">
-                <span style="font-size:11px;color:var(--text3)">ratio</span>
+                <span style="font-size:11px;color:var(--text3)"></span>
             </div>
         </div>`,
         null, 'repeat'
@@ -606,7 +1004,7 @@ function renderSecEmoji(tab) {
             </div>
             <div class="toggle-right" style="gap:8px">
                 <input type="number" value="${c.emojispam_max || 5}" data-key="emojispam_max" style="width:90px;text-align:right">
-                <span style="font-size:11px;color:var(--text3)">emojis</span>
+                <span style="font-size:11px;color:var(--text3)"></span>
             </div>
         </div>`,
         null, 'emojispam'
@@ -629,7 +1027,7 @@ function renderSecNewline(tab) {
             </div>
             <div class="toggle-right" style="gap:8px">
                 <input type="number" value="${c.newline_max || 10}" data-key="newline_max" style="width:90px;text-align:right">
-                <span style="font-size:11px;color:var(--text3)">lines</span>
+                <span style="font-size:11px;color:var(--text3)"></span>
             </div>
         </div>`,
         null, 'newline'
@@ -717,7 +1115,7 @@ function renderModuleExemptionsTab(module) {
                     </tr>
                 </thead>
                 <tbody id="me-list-${module}">
-                    <tr><td colspan="6" class="table-loading">Loading...</td></tr>
+                    <tr><td colspan="6" class="table-loading">No data yet</td></tr>
                 </tbody>
             </table>
         </div>`;
@@ -759,7 +1157,10 @@ async function loadModuleExemptions(module) {
 async function addModuleExemption(module) {
     if (!State.guildId) { toast('No server selected', 'error'); return; }
     const type      = document.getElementById(`me-type-${module}`)?.value;
-    const target_id = document.getElementById(`me-id-${module}`)?.value.trim();
+    const idEl      = type === 'user' 
+        ? document.getElementById(`me-id-user-${module}`) 
+        : document.getElementById(`me-id-${module}`);
+    const target_id = idEl?.value.trim();
     const note      = document.getElementById(`me-note-${module}`)?.value.trim() || null;
     if (!target_id) { toast('Enter an ID', 'error'); return; }
     try {
@@ -783,6 +1184,72 @@ async function removeModuleExemption(module, type, targetId) {
     } catch(e) { toast('Failed', 'error'); }
 }
 
+// === VERIFICATION ===
+async function renderVerification(tab) {
+    const el = document.getElementById('content');
+    const c  = State.config;
+    const [channels, roles] = await Promise.all([
+        loadChannels(State.guildId),
+        loadRoles(State.guildId)
+    ]);
+
+    el.innerHTML = `
+        <div class="card">
+            <div class="card-header"><div class="card-title">Verification</div></div>
+            <div class="toggle-row">
+                <div class="toggle-info">
+                    <div class="toggle-name">Enabled</div>
+                    <div class="toggle-desc">Require new members to verify before accessing the server</div>
+                </div>
+                <label class="toggle">
+                    <input type="checkbox" data-key="verification_enabled" ${c.verification_enabled ? 'checked' : ''}>
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="toggle-row">
+                <div class="toggle-info">
+                    <div class="toggle-name">Verify Channel</div>
+                    <div class="toggle-desc">Channel where the verify button is posted</div>
+                </div>
+                ${channelSelect('verification_channel_id', channels, c.verification_channel_id, [0])}
+            </div>
+            <div class="toggle-row">
+                <div class="toggle-info">
+                    <div class="toggle-name">Verified Role</div>
+                    <div class="toggle-desc">Role assigned after verification</div>
+                </div>
+                ${roleSelect('verification_role_id', roles, c.verification_role_id)}
+            </div>
+            <div class="toggle-row">
+                <div class="toggle-info">
+                    <div class="toggle-name">Timeout</div>
+                    <div class="toggle-desc">Minutes before unverified members are kicked (0 = no timeout)</div>
+                </div>
+                <div class="toggle-right" style="gap:8px">
+                    <input type="number" value="${c.verification_timeout_minutes || 10}" data-key="verification_timeout_minutes" style="width:90px;text-align:right">
+                    <span style="font-size:11px;color:var(--text3)">minutes</span>
+                </div>
+            </div>
+            <div class="card-footer">
+                <button class="btn-primary" onclick="saveVerification()">Save</button>
+            </div>
+        </div>`;
+}
+
+async function saveVerification() {
+    if (!State.guildId) { toast('No server selected', 'error'); return; }
+    const updates = {
+        verification_enabled:         document.querySelector('[data-key="verification_enabled"]').checked,
+        verification_channel_id:      document.getElementById('verification_channel_id').value,
+        verification_role_id:         document.getElementById('verification_role_id').value,
+        verification_timeout_minutes: parseInt(document.querySelector('[data-key="verification_timeout_minutes"]').value),
+    };
+    try {
+        await apiPut(`/api/config/${State.guildId}`, updates);
+        Object.assign(State.config, updates);
+        toast('Saved');
+    } catch(e) { toast('Failed', 'error'); }
+}
 
 // ============================================================
 // PANIC MODE
@@ -792,6 +1259,10 @@ async function removeModuleExemption(module, type, targetId) {
 async function renderPanicMode() {
     const el = document.getElementById('content');
     const c  = State.config;
+    const [channels, roles] = await Promise.all([
+        loadChannels(State.guildId),
+        loadRoles(State.guildId)
+    ]);
 
     let panicState = { active: 0 };
     if (State.guildId) {
@@ -825,21 +1296,21 @@ async function renderPanicMode() {
                     <div class="toggle-name">Alert Role</div>
                     <div class="toggle-desc">Role to ping when panic mode triggers</div>
                 </div>
-                <input id="panic_alert_role" value="${c.panic_alert_role || ''}" placeholder="Role ID" style="width:220px">
+                ${roleSelect('panic_alert_role', roles, c.panic_alert_role)}
             </div>
             <div class="toggle-row">
                 <div class="toggle-info">
                     <div class="toggle-name">Alert Channel</div>
                     <div class="toggle-desc">Channel for panic alerts (defaults to log channel)</div>
                 </div>
-                <input id="panic_alert_channel" value="${c.panic_alert_channel || ''}" placeholder="Channel ID" style="width:220px">
+                ${channelSelect('panic_alert_channel', channels, c.panic_alert_channel, [0])}
             </div>
             <div class="toggle-row">
                 <div class="toggle-info">
                     <div class="toggle-name">Authorized Roles</div>
                     <div class="toggle-desc">Roles that can use /panic command (admins always can)</div>
                 </div>
-                <input id="panic_authorized_roles_input" placeholder="Role ID" style="width:220px">
+                ${roleSelect('panic_authorized_roles_input', roles, '')}
             </div>
             <div style="padding:8px 18px 14px">
                 <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px" id="panic-roles-list">

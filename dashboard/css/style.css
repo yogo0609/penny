@@ -1,6 +1,5 @@
 /* ============================================================
    PENNY DASHBOARD — STYLESHEET
-   REF-CSS-01
    ============================================================ */
 
 /* === RESET === */
@@ -9,76 +8,52 @@ html, body { height: 100%; font-family: -apple-system, 'Segoe UI', Roboto, sans-
 
 /* ============================================================
    THEME VARIABLES
-   REF-CSS-02
    ============================================================ */
 
-/* === LIGHT THEME (default) === */
 :root {
-    --sb-bg:          #0f1e2e;
-    --sb-border:      rgba(201,215,230,0.08);
-    --sb-text:        #e6eef7;
-    --sb-text2:       #b9c9da;
-    --sb-text3:       #526880;
-    --sb-active-bg:   rgba(201,168,76,0.12);
-    --sb-active-text: #e6eef7;
-    --sb-active-bar:  #c9a84c;
+    --sb-bg:          #001A38;
+    --sb-border:      rgba(255,184,28,0.08);
+    --sb-text:        #ffffff;
+    --sb-text2:       #AFC7E1;
+    --sb-text3:       #7a9ab8;
+    --sb-active-bg:   rgba(255,184,28,0.12);
+    --sb-active-text: #FFB81C;
+    --sb-active-bar:  #FFB81C;
 
-    --bg:          #f0f4f8;
-    --surface:     #ffffff;
-    --surface2:    #f8fafc;
+    --bg:          #00101E;
+    --surface:     #002244;
+    --surface2:    #001A38;
 
-    --gold:        #c9a84c;
-    --gold-light:  rgba(201,168,76,0.1);
-    --gold-border: rgba(201,168,76,0.3);
+    --gold:        #FFB81C;
+    --gold-light:  rgba(255,184,28,0.1);
+    --gold-border: rgba(255,184,28,0.25);
 
-    --text:        #1a2a3a;
-    --text2:       #5a7490;
-    --text3:       #94a8bb;
+    --text:        #ffffff;
+    --text2:       #AFC7E1;
+    --text3:       #4a6a8a;
 
-    --border:      #dde5ef;
-    --border2:     #c8d6e4;
+    --border:      rgba(255,255,255,0.07);
+    --border2:     rgba(255,255,255,0.12);
 
-    --green:       #059669;
-    --green-bg:    #ecfdf5;
-    --red:         #dc2626;
-    --red-bg:      #fef2f2;
-    --amber:       #d97706;
-    --amber-bg:    #fffbeb;
-    --blue:        #1d4ed8;
-    --blue-bg:     #eff6ff;
-    --blue-border: #bfdbfe;
+    --green:       #16A34A;
+    --green-bg:    rgba(22,163,74,0.12);
+    --red:         #DC2626;
+    --red-bg:      rgba(220,38,38,0.1);
+    --amber:       #F59E0B;
+    --amber-bg:    rgba(245,158,11,0.12);
+    --blue:        #388BE0;
+    --blue-bg:     rgba(56,139,224,0.12);
+    --blue-border: rgba(56,139,224,0.2);
 
     --radius:      8px;
     --radius-lg:   12px;
 
-    --input-bg:    #f8fafc;
-    --input-border:#c8d6e4;
-}
-
-/* === DARK THEME === */
-/* REF-CSS-02b */
-body.dark {
-    --bg:          #0d1b2a;
-    --surface:     #132236;
-    --surface2:    #1a2f45;
-    --text:        #e6eef7;
-    --text2:       #8aa5be;
-    --text3:       #6b8fa8;
-    --border:      rgba(201,215,230,0.1);
-    --border2:     rgba(201,215,230,0.18);
-    --green-bg:    rgba(5,150,105,0.15);
-    --red-bg:      rgba(220,38,38,0.15);
-    --amber-bg:    rgba(217,119,6,0.15);
-    --blue-bg:     rgba(29,78,216,0.15);
-    --blue-border: rgba(29,78,216,0.3);
-    --input-bg:    #1a2f45;
-    --input-border:rgba(201,215,230,0.18);
-    color-scheme:  dark;
+    --input-bg:    rgba(0,0,0,0.25);
+    --input-border:rgba(255,255,255,0.1);
 }
 
 /* ============================================================
    UTILITIES
-   REF-CSS-03
    ============================================================ */
 
 .hidden     { display: none !important; }
@@ -90,15 +65,11 @@ body.dark {
 
 ::-webkit-scrollbar             { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track       { background: transparent; }
-::-webkit-scrollbar-thumb       { background: var(--border2); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+::-webkit-scrollbar-thumb       { background: rgba(255,184,28,0.2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,184,28,0.4); }
 
 /* ============================================================
    GLOBAL FORM CONTROLS
-   REF-CSS-04
-   All inputs, selects and textareas share the same base style.
-   Use modifier classes or container width to control sizing.
-   Never use inline width styles on these elements.
    ============================================================ */
 
 input, select, textarea {
@@ -113,13 +84,7 @@ input, select, textarea {
     transition:    border-color 0.15s, box-shadow 0.15s;
     appearance:    none;
     outline:       none;
-    color-scheme:  light;
-}
-
-body.dark input,
-body.dark select,
-body.dark textarea {
-    color-scheme: dark;
+    color-scheme:  dark;
 }
 
 input:focus,
@@ -138,10 +103,9 @@ input[type="checkbox"] {
 }
 
 input[type="number"] { text-align: right; }
-
 select { cursor: pointer; }
+select option { background: #001A38; color: #ffffff; }
 
-/* Width modifier classes — use these instead of inline styles */
 .input-sm  { width: 80px;  }
 .input-md  { width: 160px; }
 .input-lg  { width: 240px; }
@@ -150,12 +114,11 @@ select { cursor: pointer; }
 
 /* ============================================================
    LOGIN & SETUP
-   REF-CSS-05
    ============================================================ */
 
 .login-screen {
     min-height: 100vh;
-    background: var(--sb-bg);
+    background: linear-gradient(160deg, #001A3A 0%, #000F20 60%, #00080F 100%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -163,12 +126,13 @@ select { cursor: pointer; }
 }
 
 .login-card {
-    background: var(--surface);
+    background: rgba(0,34,68,0.9);
+    border: 1px solid var(--gold-border);
     border-radius: var(--radius-lg);
     padding: 40px;
     width: 100%;
     max-width: 400px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    backdrop-filter: blur(20px);
 }
 
 .login-brand  { text-align: center; margin-bottom: 32px; }
@@ -177,8 +141,8 @@ select { cursor: pointer; }
     width: 64px;
     height: 64px;
     border-radius: 50%;
-    background: var(--sb-bg);
-    border: 3px solid var(--gold);
+    background: rgba(255,184,28,0.1);
+    border: 2px solid var(--gold);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -194,12 +158,12 @@ select { cursor: pointer; }
 .login-sub        { font-size: 13px; color: var(--text2); margin-top: 4px; }
 .login-form       { display: flex; flex-direction: column; gap: 16px; }
 .form-group       { display: flex; flex-direction: column; gap: 6px; }
-.form-label       { font-size: 13px; font-weight: 600; color: var(--text); }
+.form-label       { font-size: 13px; font-weight: 600; color: var(--text2); }
 .form-optional    { font-weight: 400; color: var(--text3); }
 
 .form-error {
     background: var(--red-bg);
-    border: 1px solid #fecaca;
+    border: 1px solid rgba(220,38,38,0.3);
     border-radius: var(--radius);
     color: var(--red);
     font-size: 13px;
@@ -218,25 +182,24 @@ select { cursor: pointer; }
 
 /* ============================================================
    DASHBOARD SHELL
-   REF-CSS-06
    ============================================================ */
 
 .dashboard { display: flex; height: 100vh; overflow: hidden; }
 
 /* ============================================================
    SIDEBAR
-   REF-CSS-07
    ============================================================ */
 
 .sidebar {
     width: 210px;
     min-width: 210px;
-    background: var(--sb-bg);
+    background: linear-gradient(180deg, #002244 0%, #001527 100%);
     display: flex;
     flex-direction: column;
     height: 100vh;
     flex-shrink: 0;
     overflow: hidden;
+    border-right: 1px solid var(--sb-border);
 }
 
 .brand {
@@ -251,15 +214,14 @@ select { cursor: pointer; }
 .brand-avatar {
     width: 36px;
     height: 36px;
-    border-radius: 50%;
-    background: rgba(201,168,76,0.15);
-    border: 2px solid var(--gold);
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--gold), #E8970A);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 14px;
-    font-weight: 700;
-    color: var(--gold);
+    font-weight: 800;
+    color: #001529;
     flex-shrink: 0;
     overflow: hidden;
 }
@@ -284,12 +246,12 @@ select { cursor: pointer; }
     width: 24px;
     height: 24px;
     border-radius: 6px;
-    background: #1a3a5c;
+    background: linear-gradient(135deg, var(--gold), #E8970A);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 10px;
-    color: var(--gold);
+    color: #001529;
     font-weight: 700;
     flex-shrink: 0;
 }
@@ -307,9 +269,10 @@ select { cursor: pointer; }
     padding: 0;
     width: auto;
     box-shadow: none;
+    color-scheme: dark;
 }
 
-.sb-server-select option { background: #1a2f45; color: #e6eef7; }
+.sb-server-select option { background: #001A38; color: #e6eef7; }
 
 .nav {
     flex: 1;
@@ -318,11 +281,13 @@ select { cursor: pointer; }
     flex-direction: column;
     gap: 1px;
     overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,184,28,0.2) transparent;
 }
 
 .nav-label {
     font-size: 9px;
-    color: var(--sb-text3);
+    color: var(--sb-text);
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -330,12 +295,14 @@ select { cursor: pointer; }
 }
 
 .nav-item {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     padding: 7px 10px;
     border-radius: 6px;
     cursor: pointer;
-    font-size: 13px;
-    color: var(--sb-text3);
+    font-size: 12px;
+    color: var(--sb-text);
     transition: all 0.15s;
     border: none;
     background: none;
@@ -345,15 +312,18 @@ select { cursor: pointer; }
     font-weight: 400;
 }
 
+.nav-item svg { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.5; }
 .nav-item:hover { background: rgba(255,255,255,0.05); color: var(--sb-text2); }
+.nav-item:hover svg { opacity: 0.8; }
 
 .nav-item.active {
     background: var(--sb-active-bg);
     color: var(--sb-active-text);
-    font-weight: 500;
+    font-weight: 600;
     border-left: 2px solid var(--sb-active-bar);
     padding-left: 8px;
 }
+.nav-item.active svg { opacity: 1; }
 
 .sidebar-footer {
     padding: 10px;
@@ -367,8 +337,8 @@ select { cursor: pointer; }
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: rgba(201,168,76,0.15);
-    border: 1px solid var(--gold);
+    background: rgba(255,184,28,0.1);
+    border: 1px solid var(--gold-border);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -384,32 +354,33 @@ select { cursor: pointer; }
 
 .logout-btn {
     background: none;
-    border: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
     color: var(--sb-text3);
     font-size: 11px;
     cursor: pointer;
-    padding: 0;
+    padding: 4px 8px;
     width: auto;
-    transition: color 0.15s;
+    transition: all 0.15s;
     font-family: inherit;
     white-space: nowrap;
     box-shadow: none;
 }
 
-.logout-btn:hover { color: var(--red); }
+.logout-btn:hover { color: var(--red); border-color: var(--red); }
 
 /* ============================================================
    COLLAPSIBLE NAV GROUPS
-   REF-CSS-08
    ============================================================ */
 
 .nav-top {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    color: #e6eef7;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--sb-text2);
     padding: 8px 10px;
-    margin: 4px 6px 2px;
     border: none;
     background: none;
     width: 100%;
@@ -417,27 +388,32 @@ select { cursor: pointer; }
     font-family: inherit;
     cursor: pointer;
     border-radius: 6px;
+    transition: all 0.15s;
 }
 
+.nav-top svg { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.6; }
+.nav-top:hover { background: rgba(255,255,255,0.05); color: var(--sb-text); }
 .nav-top.active {
     background: var(--sb-active-bg);
     color: var(--sb-active-text);
     border-left: 2px solid var(--sb-active-bar);
     padding-left: 8px;
 }
+.nav-top.active svg { opacity: 1; }
 
 .nav-group { margin-bottom: 2px; }
 
 .nav-group-header {
     display: flex;
     align-items: center;
+    gap: 8px;
     justify-content: space-between;
     width: 100%;
     padding: 7px 10px;
     background: none;
     border: none;
     color: var(--sb-text3);
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -448,75 +424,100 @@ select { cursor: pointer; }
     box-shadow: none;
 }
 
+.nav-group-header svg { width: 13px; height: 13px; flex-shrink: 0; opacity: 0.5; margin-right: auto; }
 .nav-group-header:hover { color: var(--sb-text2); background: rgba(255,255,255,0.04); }
-.nav-group-header.open  { color: #e6eef7; }
+.nav-group-header.open  { color: var(--sb-text2); }
+.nav-group-header.open svg { opacity: 0.8; }
 
-.nav-chevron { font-size: 10px; transition: transform 0.2s; display: inline-block; }
+.nav-chevron { font-size: 10px; transition: transform 0.2s; display: inline-block; flex-shrink: 0; }
 .nav-chevron.open { transform: rotate(90deg); }
 
 .nav-group-children {
-    display: none;
+    display: flex;
     flex-direction: column;
     gap: 1px;
     padding-left: 14px;
-    padding-top: 2px;
-    padding-bottom: 6px;
+    padding-top: 0;
+    padding-bottom: 0;
     background: rgba(0,0,0,0.15);
     border-radius: 6px;
     margin: 0 4px;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease, padding 0.25s ease;
+}
+
+.nav-group-children.open {
+    max-height: 400px;
+    padding-top: 2px;
+    padding-bottom: 6px;
 }
 
 .nav-group-children.open { display: flex; }
 
 /* ============================================================
    MAIN AREA
-   REF-CSS-09
    ============================================================ */
 
-.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: linear-gradient(160deg, #001A3A 0%, #000F20 60%, #00080F 100%);
+}
 
 /* ============================================================
    TOP BAR
-   REF-CSS-10
    ============================================================ */
 
 .topbar {
     height: 52px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--sb-border);
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0 20px;
-    background: var(--surface);
+    background: rgba(0,20,40,0.9);
     flex-shrink: 0;
+    backdrop-filter: blur(10px);
 }
 
-.topbar-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.topbar-title { font-size: 12px; font-weight: 700; color: var(--text2); letter-spacing: 0.06em; text-transform: uppercase; }
 .topbar-right { display: flex; align-items: center; gap: 8px; }
 
-.status-pill  { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); }
+.status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--green-bg);
+    border: 1px solid rgba(22,163,74,0.25);
+    border-radius: 20px;
+    padding: 4px 10px;
+}
 
 .status-dot {
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: var(--green);
     animation: pulse 2s infinite;
 }
 
 .status-dot.offline { background: var(--red); animation: none; }
-.status-text        { font-size: 12px; }
+.status-text        { font-size: 10px; color: var(--green); font-weight: 700; letter-spacing: 0.04em; }
 
-@keyframes pulse { 0%,100%{ opacity:1; } 50%{ opacity:0.4; } }
+@keyframes pulse { 0%,100%{ opacity:1; } 50%{ opacity:0.5; } }
 
 .test-badge {
     background: var(--amber-bg);
     color: var(--amber);
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 10px;
+    font-weight: 700;
     padding: 4px 10px;
     border-radius: 20px;
-    border: 1px solid rgba(217,119,6,0.3);
+    border: 1px solid rgba(245,158,11,0.3);
+    letter-spacing: 0.05em;
 }
 
 .theme-toggle {
@@ -524,7 +525,7 @@ select { cursor: pointer; }
     height: 32px;
     border-radius: 50%;
     border: 1px solid var(--border2);
-    background: var(--surface2);
+    background: rgba(255,255,255,0.05);
     color: var(--text2);
     font-size: 15px;
     cursor: pointer;
@@ -533,7 +534,6 @@ select { cursor: pointer; }
     justify-content: center;
     transition: all 0.15s;
     font-family: inherit;
-    width: 32px;
     padding: 0;
     box-shadow: none;
 }
@@ -542,26 +542,26 @@ select { cursor: pointer; }
 
 /* ============================================================
    SUB NAV
-   REF-CSS-11
    ============================================================ */
 
 .subnav {
-    background: var(--surface);
+    background: rgba(0,15,30,0.7);
     border-bottom: 1px solid var(--border);
     padding: 0 20px;
     display: flex;
     align-items: center;
     height: 42px;
     flex-shrink: 0;
+    gap: 2px;
 }
 
 .subnav-item {
-    padding: 0 14px;
+    padding: 0 12px;
     height: 42px;
     display: flex;
     align-items: center;
-    font-size: 13px;
-    color: var(--text2);
+    font-size: 12px;
+    color: var(--text3);
     cursor: pointer;
     border: none;
     background: none;
@@ -572,24 +572,43 @@ select { cursor: pointer; }
     font-family: inherit;
     width: auto;
     box-shadow: none;
+    border-radius: 0;
 }
 
-.subnav-item:hover  { color: var(--text); }
-.subnav-item.active { color: var(--gold); border-bottom-color: var(--gold); font-weight: 600; }
+.subnav-item:hover  { color: var(--text2); }
+.subnav-item.active { color: var(--gold); border-bottom-color: var(--gold); font-weight: 700; }
 
 .subnav-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
+.subnav-btn {
+    font-size: 11px;
+    padding: 5px 12px;
+    background: var(--gold-light);
+    border: 1px solid var(--gold-border);
+    border-radius: var(--radius);
+    color: var(--gold);
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: none;
+    width: auto;
+}
+.subnav-btn:hover { background: var(--gold); color: #001529; }
+
 /* ============================================================
    CONTENT AREA
-   REF-CSS-12
    ============================================================ */
 
-.content { flex: 1; overflow-y: auto; padding: 24px; background: var(--bg); }
+.content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,184,28,0.15) transparent;
+}
 
 /* ============================================================
    BUTTONS
-   REF-CSS-13
-   All buttons share base styles. Use modifier classes only.
    ============================================================ */
 
 .btn-primary,
@@ -606,37 +625,31 @@ select { cursor: pointer; }
     font-weight: 600;
     font-family: inherit;
     cursor: pointer;
-    transition: opacity 0.15s, background 0.15s, border-color 0.15s;
+    transition: all 0.15s;
     white-space: nowrap;
     border: 1px solid transparent;
     width: auto;
     box-shadow: none;
 }
 
-/* Primary — gold fill */
-.btn-primary { background: var(--gold); color: #fff; border-color: var(--gold); }
-.btn-primary:hover { opacity: 0.88; }
+.btn-primary   { background: var(--gold); color: #001529; border-color: var(--gold); }
+.btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
 
-/* Secondary — subtle outline */
-.btn-secondary { background: var(--surface2); color: var(--text2); border-color: var(--border2); }
-.btn-secondary:hover { color: var(--text); border-color: var(--border); }
+.btn-secondary { background: rgba(175,199,225,0.08); color: var(--text2); border-color: var(--border2); }
+.btn-secondary:hover { color: var(--text); border-color: rgba(175,199,225,0.3); }
 
-/* Danger — solid red fill with white text */
 .btn-danger { background: var(--red); color: #fff; border-color: var(--red); }
 .btn-danger:hover { opacity: 0.88; }
 
-/* Ghost — transparent, text only */
 .btn-ghost { background: transparent; color: var(--text2); border-color: transparent; padding: 8px 10px; }
-.btn-ghost:hover { color: var(--text); background: var(--surface2); }
+.btn-ghost:hover { color: var(--text); background: rgba(255,255,255,0.05); }
 
-/* Size modifiers */
-.btn-sm { padding: 5px 12px; font-size: 12px; }
-.btn-lg { padding: 11px 24px; font-size: 14px; }
+.btn-sm   { padding: 5px 12px; font-size: 12px; }
+.btn-lg   { padding: 11px 24px; font-size: 14px; }
 .btn-full { width: 100%; }
 
 /* ============================================================
    STAT CARDS
-   REF-CSS-14
    ============================================================ */
 
 .stats-grid {
@@ -649,25 +662,25 @@ select { cursor: pointer; }
 .stat-card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-top: 3px solid var(--border2);
+    border-left: 3px solid var(--border2);
     border-radius: var(--radius);
     padding: 16px 18px;
+    transition: border-color 0.15s;
 }
 
-.stat-card.blue  { border-top-color: var(--blue);  }
-.stat-card.green { border-top-color: var(--green); }
-.stat-card.red   { border-top-color: var(--red);   }
-.stat-card.gold  { border-top-color: var(--gold);  }
+.stat-card.blue  { border-left-color: var(--blue);  }
+.stat-card.green { border-left-color: var(--green); }
+.stat-card.red   { border-left-color: var(--red);   }
+.stat-card.gold  { border-left-color: var(--gold);  }
 
-.stat-label { font-size: 11px; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
-.stat-value { font-size: 26px; font-weight: 700; color: var(--text); letter-spacing: -1px; }
+.stat-label { font-size: 10px; color: var(--text2); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+.stat-value { font-size: 26px; font-weight: 800; color: var(--text); letter-spacing: -1px; }
 .stat-trend { font-size: 11px; margin-top: 4px; color: var(--text3); }
 .stat-trend.up   { color: var(--green); }
 .stat-trend.down { color: var(--red); }
 
 /* ============================================================
    CARDS
-   REF-CSS-15
    ============================================================ */
 
 .card {
@@ -676,7 +689,6 @@ select { cursor: pointer; }
     border-radius: var(--radius);
     margin-bottom: 16px;
     overflow: hidden;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 
 .card-header {
@@ -685,16 +697,15 @@ select { cursor: pointer; }
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: var(--surface2);
+    background: rgba(0,0,0,0.2);
 }
 
 .card-title  { font-size: 13px; font-weight: 700; color: var(--text); }
 .card-desc   { font-size: 11px; color: var(--text2); margin-top: 2px; }
-.card-footer { padding: 13px 18px; border-top: 1px solid var(--border); background: var(--surface2); }
+.card-footer { padding: 13px 18px; border-top: 1px solid var(--border); background: rgba(0,0,0,0.15); }
 
 /* ============================================================
    TOGGLE ROWS
-   REF-CSS-16
    ============================================================ */
 
 .toggle-row {
@@ -708,21 +719,21 @@ select { cursor: pointer; }
 }
 
 .toggle-row:last-child { border-bottom: none; }
-.toggle-row:hover      { background: var(--surface2); }
+.toggle-row:hover      { background: rgba(255,255,255,0.02); }
 
-.toggle-info { flex: 1; min-width: 0; }
-.toggle-name { font-size: 13px; color: var(--text); font-weight: 500; }
-.toggle-desc { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.toggle-info  { flex: 1; min-width: 0; }
+.toggle-name  { font-size: 13px; color: var(--text); font-weight: 500; }
+.toggle-desc  { font-size: 11px; color: var(--text3); margin-top: 2px; }
 .toggle-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
-/* Toggle switch */
 .toggle       { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
 .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
 
 .slider {
     position: absolute;
     inset: 0;
-    background: var(--border2);
+    background: rgba(255,255,255,0.1);
+    border: 1px solid var(--border2);
     border-radius: 22px;
     cursor: pointer;
     transition: background 0.2s;
@@ -733,34 +744,32 @@ select { cursor: pointer; }
     position: absolute;
     width: 16px;
     height: 16px;
-    left: 3px;
-    top: 3px;
-    background: #fff;
+    left: 2px;
+    top: 2px;
+    background: var(--text3);
     border-radius: 50%;
     transition: transform 0.2s;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
 }
 
-input:checked + .slider          { background: var(--gold); }
-input:checked + .slider::before { transform: translateX(18px); }
+input:checked + .slider          { background: var(--green); border-color: var(--green); }
+input:checked + .slider::before { transform: translateX(18px); background: #fff; }
 
 /* ============================================================
    DATA TABLES
-   REF-CSS-17
    ============================================================ */
 
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 .data-table th {
     text-align: left;
-    color: var(--text2);
-    font-weight: 600;
+    color: var(--text3);
+    font-weight: 700;
     padding: 10px 18px;
     border-bottom: 1px solid var(--border);
-    font-size: 11px;
+    font-size: 10px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    background: var(--surface2);
+    letter-spacing: 0.06em;
+    background: rgba(0,0,0,0.2);
     white-space: nowrap;
 }
 
@@ -771,12 +780,11 @@ input:checked + .slider::before { transform: translateX(18px); }
 }
 
 .data-table tr:last-child td { border-bottom: none; }
-.data-table tr:hover td      { background: var(--surface2); }
+.data-table tr:hover td      { background: rgba(255,255,255,0.02); }
 .table-loading               { text-align: center; padding: 32px; color: var(--text3); font-size: 13px; }
 
 /* ============================================================
    BADGES
-   REF-CSS-18
    ============================================================ */
 
 .badge {
@@ -789,26 +797,24 @@ input:checked + .slider::before { transform: translateX(18px); }
     white-space: nowrap;
 }
 
-.badge-spam   { background: var(--red-bg);              color: var(--red);   }
-.badge-warn   { background: var(--amber-bg);            color: var(--amber); }
-.badge-caps   { background: var(--blue-bg);             color: var(--blue);  }
-.badge-join   { background: var(--green-bg);            color: var(--green); }
-.badge-raid   { background: #fce7f3;                   color: #be185d;      }
-.badge-owner  { background: rgba(201,168,76,0.15);     color: var(--gold);  }
-.badge-admin  { background: var(--blue-bg);             color: var(--blue);  }
+.badge-spam   { background: var(--red-bg);   color: var(--red);   }
+.badge-warn   { background: var(--amber-bg); color: var(--amber); }
+.badge-caps   { background: var(--blue-bg);  color: var(--blue);  }
+.badge-join   { background: var(--green-bg); color: var(--green); }
+.badge-raid   { background: rgba(190,24,93,0.12); color: #be185d; }
+.badge-owner  { background: var(--gold-light); color: var(--gold); }
+.badge-admin  { background: var(--blue-bg);  color: var(--blue);  }
 
-/* Module status badges */
 .ms-dot  { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 .ms-dot.on  { background: var(--green); }
 .ms-dot.off { background: var(--border2); }
 .ms-badge { padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; }
 .ms-on   { background: var(--green-bg); color: var(--green); }
-.ms-off  { background: var(--surface2); color: var(--text3); }
+.ms-off  { background: rgba(255,255,255,0.06); color: var(--text3); }
 .ms-test { background: var(--amber-bg); color: var(--amber); }
 
 /* ============================================================
    EXEMPTIONS
-   REF-CSS-19
    ============================================================ */
 
 .exempt-item {
@@ -816,7 +822,7 @@ input:checked + .slider::before { transform: translateX(18px); }
     align-items: center;
     justify-content: space-between;
     padding: 9px 14px;
-    background: var(--surface2);
+    background: rgba(255,255,255,0.04);
     border-radius: var(--radius);
     margin-bottom: 6px;
     border: 1px solid var(--border);
@@ -839,7 +845,6 @@ input:checked + .slider::before { transform: translateX(18px); }
 
 /* ============================================================
    BAD WORDS
-   REF-CSS-20
    ============================================================ */
 
 .word-grid {
@@ -855,7 +860,7 @@ input:checked + .slider::before { transform: translateX(18px); }
     align-items: center;
     gap: 6px;
     background: var(--red-bg);
-    border: 1px solid #fecaca;
+    border: 1px solid rgba(220,38,38,0.3);
     border-radius: 20px;
     padding: 4px 12px;
     font-size: 12px;
@@ -882,34 +887,32 @@ input:checked + .slider::before { transform: translateX(18px); }
 
 /* ============================================================
    DANGER ZONE
-   REF-CSS-21
    ============================================================ */
 
-.danger-header { padding: 13px 18px; border-bottom: 1px solid #fecaca; background: var(--red-bg); }
+.danger-header { padding: 13px 18px; border-bottom: 1px solid rgba(220,38,38,0.2); background: var(--red-bg); }
 .danger-title  { font-size: 13px; font-weight: 700; color: var(--red); }
 
 /* ============================================================
    TOAST
-   REF-CSS-22
    ============================================================ */
 
 .toast {
     position: fixed;
     bottom: 24px;
     right: 24px;
-    background: var(--text);
-    color: #fff;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    color: var(--text);
     font-size: 13px;
     padding: 12px 20px;
     border-radius: var(--radius);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
     z-index: 9999;
     animation: slideUp 0.2s ease;
     max-width: 320px;
 }
 
-.toast.success { background: var(--green); }
-.toast.error   { background: var(--red);   }
+.toast.success { background: var(--green); border-color: var(--green); color: #fff; }
+.toast.error   { background: var(--red);   border-color: var(--red);   color: #fff; }
 
 @keyframes slideUp {
     from { transform: translateY(10px); opacity: 0; }
@@ -918,7 +921,6 @@ input:checked + .slider::before { transform: translateX(18px); }
 
 /* ============================================================
    EMPTY STATE
-   REF-CSS-23
    ============================================================ */
 
 .empty-state       { text-align: center; padding: 48px 24px; color: var(--text3); }
@@ -926,7 +928,6 @@ input:checked + .slider::before { transform: translateX(18px); }
 
 /* ============================================================
    HEALTH SCORE
-   REF-CSS-24
    ============================================================ */
 
 .health-score-val  { font-size: 28px; font-weight: 700; color: var(--green); }
@@ -942,7 +943,6 @@ input:checked + .slider::before { transform: translateX(18px); }
 
 /* ============================================================
    MODULE STATUS LIST
-   REF-CSS-25
    ============================================================ */
 
 .module-status-row {
@@ -958,7 +958,6 @@ input:checked + .slider::before { transform: translateX(18px); }
 
 /* ============================================================
    PUNISHMENT LADDER
-   REF-CSS-26
    ============================================================ */
 
 .ladder-step {
@@ -984,19 +983,19 @@ input:checked + .slider::before { transform: translateX(18px); }
     margin-top: 4px;
 }
 
-.ladder-step-body   { flex: 1; display: flex; flex-direction: column; gap: 10px; }
-.ladder-row         { display: flex; align-items: center; gap: 10px; }
-.ladder-step-actions{ display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.ladder-step-body    { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.ladder-row          { display: flex; align-items: center; gap: 10px; }
+.ladder-step-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
 
 /* ============================================================
    MODAL
-   REF-CSS-27
    ============================================================ */
 
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.6);
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px);
     z-index: 2000;
     display: flex;
     align-items: center;
@@ -1008,12 +1007,11 @@ input:checked + .slider::before { transform: translateX(18px); }
 .modal-overlay.hidden { display: none; }
 
 .modal {
-    background: var(--surface);
-    border: 1px solid var(--border);
+    background: #002244;
+    border: 1px solid var(--gold-border);
     border-radius: var(--radius-lg);
     width: 100%;
     max-width: 480px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
     animation: slideUp 0.15s ease;
     overflow: hidden;
 }
@@ -1024,7 +1022,7 @@ input:checked + .slider::before { transform: translateX(18px); }
     justify-content: space-between;
     padding: 16px 20px;
     border-bottom: 1px solid var(--border);
-    background: var(--surface2);
+    background: rgba(0,0,0,0.2);
 }
 
 .modal-title { font-size: 14px; font-weight: 700; color: var(--text); }
@@ -1034,7 +1032,7 @@ input:checked + .slider::before { transform: translateX(18px); }
     height: 28px;
     border-radius: 6px;
     border: 1px solid var(--border2);
-    background: var(--surface);
+    background: rgba(255,255,255,0.05);
     color: var(--text2);
     font-size: 16px;
     cursor: pointer;
@@ -1059,7 +1057,7 @@ input:checked + .slider::before { transform: translateX(18px); }
     gap: 8px;
     padding: 14px 20px;
     border-top: 1px solid var(--border);
-    background: var(--surface2);
+    background: rgba(0,0,0,0.15);
 }
 
 .modal-field { display: flex; flex-direction: column; gap: 6px; }
@@ -1067,7 +1065,7 @@ input:checked + .slider::before { transform: translateX(18px); }
 
 .modal-error {
     background: var(--red-bg);
-    border: 1px solid #fecaca;
+    border: 1px solid rgba(220,38,38,0.3);
     border-radius: var(--radius);
     color: var(--red);
     font-size: 12px;
@@ -1084,7 +1082,6 @@ input:checked + .slider::before { transform: translateX(18px); }
 
 /* ============================================================
    ACTION PILL
-   REF-CSS-28
    ============================================================ */
 
 .action-pill {
@@ -1093,7 +1090,7 @@ input:checked + .slider::before { transform: translateX(18px); }
     border-radius: 20px;
     border: 1px solid var(--border2);
     color: var(--text2);
-    background: var(--surface2);
+    background: rgba(255,255,255,0.05);
     cursor: pointer;
     font-weight: 500;
     transition: all 0.15s;
@@ -1106,7 +1103,6 @@ input:checked + .slider::before { transform: translateX(18px); }
 
 /* ============================================================
    USER MANAGEMENT
-   REF-CSS-29
    ============================================================ */
 
 .user-table-avatar {
@@ -1127,30 +1123,34 @@ input:checked + .slider::before { transform: translateX(18px); }
 .user-cell { display: flex; align-items: center; gap: 10px; }
 
 /* ============================================================
-   SWATCH (appearance)
-   REF-CSS-30
+   ACTIVITY FEED
    ============================================================ */
 
-.swatch-row { display: flex; gap: 8px; }
-
-.swatch {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    cursor: pointer;
-    border: 2px solid transparent;
-    transition: all 0.15s;
-    padding: 0;
-    box-shadow: none;
-    width: 24px;
+.activity-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
 }
 
-.swatch:hover  { transform: scale(1.1); }
-.swatch.active { border-color: var(--text); box-shadow: 0 0 0 3px rgba(0,0,0,0.1); }
+.activity-item:last-child { border-bottom: none; }
+.activity-item:hover      { background: rgba(255,255,255,0.02); }
+
+.activity-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-top: 5px;
+    flex-shrink: 0;
+}
+
+.activity-text { font-size: 13px; color: var(--text2); line-height: 1.5; }
+.activity-time { font-size: 11px; color: var(--text3); margin-top: 3px; }
 
 /* ============================================================
    RESPONSIVE
-   REF-CSS-31
    ============================================================ */
 
 @media (max-width: 900px) {
@@ -1182,7 +1182,7 @@ input:checked + .slider::before { transform: translateX(18px); }
         display: none;
         position: fixed;
         inset: 0;
-        background: rgba(0,0,0,0.5);
+        background: rgba(0,0,0,0.6);
         z-index: 999;
     }
 
@@ -1196,7 +1196,7 @@ input:checked + .slider::before { transform: translateX(18px); }
         height: 36px;
         border: 1px solid var(--border2);
         border-radius: 8px;
-        background: var(--surface2);
+        background: rgba(255,255,255,0.05);
         cursor: pointer;
         font-size: 18px;
         color: var(--text2);
@@ -1216,159 +1216,132 @@ input:checked + .slider::before { transform: translateX(18px); }
 }
 
 /* ============================================================
-   LEGACY ALIASES — kept for backward compatibility
-   REF-CSS-32
+   LEGACY ALIASES
    ============================================================ */
 
-/* settings-input is now just a standard input with controlled width */
 .settings-input {
-    background:    var(--input-bg);
-    border:        1px solid var(--input-border);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
     border-radius: var(--radius);
-    color:         var(--text);
-    font-size:     13px;
-    font-family:   inherit;
-    padding:       8px 12px;
-    transition:    border-color 0.15s, box-shadow 0.15s;
-    outline:       none;
-    width:         240px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    padding: 8px 12px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    outline: none;
+    width: 240px;
 }
+.settings-input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-light); }
 
-.settings-input:focus {
-    border-color: var(--gold);
-    box-shadow:   0 0 0 3px var(--gold-light);
-}
-
-/* thr-input kept for ladder steps */
 .thr-input {
-    background:    var(--input-bg);
-    border:        1px solid var(--input-border);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
     border-radius: var(--radius);
-    color:         var(--text);
-    font-size:     13px;
-    font-family:   inherit;
-    padding:       6px 10px;
-    width:         80px;
-    text-align:    center;
-    transition:    border-color 0.15s, box-shadow 0.15s;
-    outline:       none;
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    padding: 6px 10px;
+    width: 80px;
+    text-align: center;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    outline: none;
 }
+.thr-input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-light); }
 
-.thr-input:focus {
-    border-color: var(--gold);
-    box-shadow:   0 0 0 3px var(--gold-light);
-}
-
-/* modal-input kept for modals */
 .modal-input {
-    background:    var(--input-bg);
-    border:        1px solid var(--input-border);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
     border-radius: var(--radius);
-    color:         var(--text);
-    font-size:     13px;
-    font-family:   inherit;
-    padding:       9px 12px;
-    width:         100%;
-    transition:    border-color 0.15s, box-shadow 0.15s;
-    outline:       none;
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    padding: 9px 12px;
+    width: 100%;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    outline: none;
 }
+.modal-input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-light); }
 
-.modal-input:focus {
-    border-color: var(--gold);
-    box-shadow:   0 0 0 3px var(--gold-light);
-}
-
-/* add-input kept for exemption forms */
 .add-input {
-    background:    var(--input-bg);
-    border:        1px solid var(--input-border);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
     border-radius: var(--radius);
-    color:         var(--text);
-    font-size:     13px;
-    font-family:   inherit;
-    padding:       8px 12px;
-    transition:    border-color 0.15s, box-shadow 0.15s;
-    outline:       none;
-    flex:          1;
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    padding: 8px 12px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    outline: none;
+    flex: 1;
 }
+.add-input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-light); }
 
-.add-input:focus {
-    border-color: var(--gold);
-    box-shadow:   0 0 0 3px var(--gold-light);
-}
-
-/* word-input kept for bad words */
 .word-input {
-    background:    var(--input-bg);
-    border:        1px solid var(--input-border);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
     border-radius: var(--radius);
-    color:         var(--text);
-    font-size:     13px;
-    font-family:   inherit;
-    padding:       8px 12px;
-    flex:          1;
-    max-width:     260px;
-    transition:    border-color 0.15s, box-shadow 0.15s;
-    outline:       none;
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    padding: 8px 12px;
+    flex: 1;
+    max-width: 260px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    outline: none;
 }
+.word-input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-light); }
 
-.word-input:focus {
-    border-color: var(--gold);
-    box-shadow:   0 0 0 3px var(--gold-light);
-}
-
-/* form-input kept for login */
 .form-input {
-    background:    var(--input-bg);
-    border:        1px solid var(--input-border);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
     border-radius: var(--radius);
-    color:         var(--text);
-    font-size:     14px;
-    font-family:   inherit;
-    padding:       10px 14px;
-    width:         100%;
-    transition:    border-color 0.15s, box-shadow 0.15s;
-    outline:       none;
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    padding: 10px 14px;
+    width: 100%;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    outline: none;
 }
-
-.form-input:focus {
-    border-color: var(--gold);
-    box-shadow:   0 0 0 3px var(--gold-light);
-}
+.form-input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-light); }
 
 /* ============================================================
-   ACTIVITY FEED
-   REF-CSS-33
+   SWATCH
    ============================================================ */
 
-.activity-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 12px 18px;
-    border-bottom: 1px solid var(--border);
-    transition: background 0.1s;
-}
-
-.activity-item:last-child { border-bottom: none; }
-.activity-item:hover      { background: var(--surface2); }
-
-.activity-dot  {
-    width: 7px;
-    height: 7px;
+.swatch-row { display: flex; gap: 8px; }
+.swatch {
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
-    margin-top: 5px;
-    flex-shrink: 0;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.15s;
+    padding: 0;
+    box-shadow: none;
+}
+.swatch:hover  { transform: scale(1.1); }
+.swatch.active { border-color: var(--text); }
+/* === ANIMATIONS === */
+
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
-.activity-text {
-    font-size: 13px;
-    color: var(--text2);
-    line-height: 1.5;
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
 }
 
-.activity-time {
-    font-size: 11px;
-    color: var(--text3);
-    margin-top: 3px;
+.content-animate {
+    animation: fadeInUp 0.2s ease forwards;
+}
+
+.card {
+    animation: fadeInUp 0.2s ease forwards;
+}
+
+.stat-card {
+    animation: fadeInUp 0.2s ease forwards;
 }

@@ -6,7 +6,7 @@
 
 
 // REF-AUD-02
-function renderAuditLog(tab) {
+async function renderAuditLog(tab) {
     const el = document.getElementById('content');
 
     if (tab === 'Events') {
@@ -31,15 +31,16 @@ function renderAuditLog(tab) {
     }
 
     if (tab === 'Settings') {
+        const channels = await loadChannels(State.guildId);
         el.innerHTML = `
             <div class="card">
                 <div class="card-header"><div class="card-title">Audit Channel</div></div>
                 <div class="toggle-row">
                     <div class="toggle-info">
                         <div class="toggle-name">Default Audit Channel</div>
-                        <div class="toggle-desc">Channel ID where audit events are posted</div>
+                        <div class="toggle-desc">Channel where audit events are posted</div>
                     </div>
-                    <input id="audit_channel_id" placeholder="Channel ID" style="width:220px">
+                    ${channelSelect('audit_channel_id', channels, State.config.audit_channel_id, [0])}
                 </div>
                 <div class="card-footer">
                     <button class="btn-primary" onclick="saveAuditSettings()">Save</button>
@@ -73,7 +74,6 @@ function renderAuditLog(tab) {
                 <div class="card-header"><div class="card-title">Voice Events</div></div>
                 ${auditToggle('audit_voice', 'Voice Join, Leave or Move')}
             </div>`;
-        loadAuditSettings();
     }
 }
 
@@ -126,10 +126,19 @@ function filterAuditLog() {
 }
 
 // REF-AUD-07
-async function loadAuditSettings() {
-    if (!State.guildId) return;
-    const channelInput = document.getElementById('audit_channel_id');
-    if (channelInput) channelInput.value = State.config.audit_channel_id || '';
+async function loadAuditSettings() {}
+
+// REF-AUD-09
+async function saveAuditSettings() {
+    if (!State.guildId) { toast('No server selected', 'error'); return; }
+    const updates = {
+        audit_channel_id: document.getElementById('audit_channel_id').value,
+    };
+    try {
+        await apiPut(`/api/config/${State.guildId}`, updates);
+        Object.assign(State.config, updates);
+        toast('Saved');
+    } catch(e) { toast('Failed', 'error'); }
 }
 
 // REF-AUD-08

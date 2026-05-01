@@ -1,8 +1,8 @@
-k// === DEPENDENCIES ===
+// === DEPENDENCIES ===
 require('dotenv').config();
 const { Client, GatewayIntentBits, Partials, EmbedBuilder, PermissionsBitField, AuditLogEvent } = require('discord.js');
 const axios = require('axios');
-const { handleBan, handleUnban, handleKick, handleMute, handleUnmute, handleWarn, handleSoftban, handlePurge, handleWarnings, handleClearWarnings, handleLockdown, handleServerLockdown, handleUserinfo, handleBans, handleTempban, handleTempmute } = require('./commands/moderation');
+const { handleBan, handleUnban, handleKick, handleMute, handleUnmute, handleWarn, handleSoftban, handlePurge, handleWarnings, handleClearWarnings, handleLockdown, handleServerLockdown, handleUserinfo, handleBans, handleTempban, handleTempmute, } = require('./commands/moderation');
 
 
 // === API CLIENT ===
@@ -217,6 +217,68 @@ async function takeAction(member, action, reason, config) {
     }
 }
 
+// === QUARANTINE SYSTEM ===
+// REF-BOT-31
+async function quarantineUser(member, reason, config) {
+    try {
+        const guild = member.guild;
+
+        // Find or create quarantine role
+        let role = guild.roles.cache.find(r => r.name === 'Quarantined');
+        if (!role) {
+            role = await guild.roles.create({
+                name: 'Quarantined',
+                color: 0x808080,
+                reason: 'Penny quarantine system',
+            });
+            // Deny view in all channels
+            for (const [, channel] of guild.channels.cache) {
+                await channel.permissionOverwrites.create(role, {
+                    ViewChannel: false,
+                    SendMessages: false,
+                }).catch(() => {});
+            }
+            // Create or find quarantine channel
+            let qChannel = guild.channels.cache.find(c => c.name === 'quarantine');
+            if (!qChannel) {
+                qChannel = await guild.channels.create({
+                    name: 'quarantine',
+                    reason: 'Penny quarantine channel',
+                    permissionOverwrites: [
+                        { id: guild.roles.everyone, deny: ['ViewChannel'] },
+                        { id: role, allow: ['ViewChannel'], deny: ['SendMessages'] },
+                    ],
+                });
+            }
+            await qChannel.send('⚠️ You have been quarantined. Please wait for a moderator to review your case.');
+        }
+
+        await member.roles.add(role, reason);
+        await member.send(`🔒 You have been quarantined in **${guild.name}**.\nReason: ${reason}`).catch(() => {});
+
+        await api.post(`/api/logs/${guild.id}`, {
+            action: 'QUARANTINE',
+            target_id: member.id,
+            target_tag: member.user.tag,
+            moderator: 'Penny',
+            reason,
+        }).catch(() => {});
+
+    } catch (err) {
+        console.error(`[QUARANTINE] ${err.message}`);
+    }
+}
+
+async function unquarantineUser(member, reason) {
+    try {
+        const role = member.guild.roles.cache.find(r => r.name === 'Quarantined');
+        if (!role) return;
+        await member.roles.remove(role, reason);
+        await member.send(`✅ You have been unquarantined in **${member.guild.name}**.`).catch(() => {});
+    } catch (err) {
+        console.error(`[UNQUARANTINE] ${err.message}`);
+    }
+}
 
 // === WARNING SYSTEM ===
 // REF-BOT-09
@@ -280,10 +342,14 @@ async function issueWarning(member, reason, config) {
                         `🚨 You have been **temporarily banned** from **${member.guild.name}**\nDuration: ${step.duration} ${step.duration_unit}\nReason: ${reason}`
                     ).catch(() => {});
                     await member.ban({ reason, deleteMessageSeconds: 0 });
-                    // Schedule unban
-                    setTimeout(async () => {
-                        await member.guild.members.unban(member.id, 'Tempban expired').catch(() => {});
-                    }, ms);
+                    // Schedule unban via persistent job
+                    const executeAt = new Date(Date.now() + ms).toISOString();
+                    await api.post('/api/scheduled-jobs', {
+                        guild_id: member.guild.id,
+                        type: 'unban',
+                        target_id: member.id,
+                        execute_at: executeAt,
+                    }).catch(() => {});
                     await api.post(`/api/logs/${member.guild.id}`, {
                         action: 'TEMPBAN', target_id: member.id, target_tag: member.user.tag,
                         moderator: 'Penny', reason: `Warning ${count} — ${reason} (${step.duration} ${step.duration_unit})`,
@@ -328,6 +394,29 @@ async function inlineWarn(message, reason) {
         `⚠️ <@${message.author.id}> — ${reason} Repeated violations may result in escalated action.`
     ).catch(() => {});
     if (warning) setTimeout(() => warning.delete().catch(() => {}), 8000);
+}
+
+
+// === QUARANTINE COMMAND HANDLER ===
+// REF-BOT-32
+async function handleQuarantine(interaction) {
+    const config = await getConfig(interaction.guild.id);
+    const target = interaction.options.getUser('user');
+    const reason = interaction.options.getString('reason') || 'No reason provided';
+    const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+    if (!member) return interaction.reply({ content: 'User not found.', ephemeral: true });
+    await quarantineUser(member, reason, config);
+    await interaction.reply({ content: `🔒 ${target.tag} has been quarantined.`, ephemeral: true });
+}
+
+// REF-BOT-33
+async function handleUnquarantine(interaction) {
+    const target = interaction.options.getUser('user');
+    const reason = interaction.options.getString('reason') || 'No reason provided';
+    const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+    if (!member) return interaction.reply({ content: 'User not found.', ephemeral: true });
+    await unquarantineUser(member, reason);
+    await interaction.reply({ content: `✅ ${target.tag} has been unquarantined.`, ephemeral: true });
 }
 
 // === PANIC COMMAND HANDLER ===
@@ -525,6 +614,19 @@ client.once('clientReady', async () => {
         }));
         await api.post('/api/guilds', { guilds });
         console.log(`📋 Registered ${guilds.length} guild(s) with API`);
+
+        // === SYNC CHANNELS & ROLES ===
+        for (const [, guild] of client.guilds.cache) {
+            const channels = guild.channels.cache.map(c => ({
+                id: c.id, name: c.name, type: c.type, position: c.position || 0
+            }));
+            const roles = guild.roles.cache.map(r => ({
+                id: r.id, name: r.name, color: r.color, position: r.position || 0
+            }));
+            await api.post(`/api/guild-channels/${guild.id}`, { channels }).catch(() => {});
+            await api.post(`/api/guild-roles/${guild.id}`, { roles }).catch(() => {});
+            console.log(`🔄 Synced channels & roles for ${guild.name}`);
+        }
     } catch(err) {
         console.error(`[GUILDS] Failed to register guilds: ${err.message}`);
     }
@@ -839,6 +941,80 @@ client.on('guildMemberAdd', async (member) => {
         }
     }
 
+    // === JOIN GATE: DEFAULT AVATAR ===
+    // REF-BOT-38a
+    if (config.joingate_avatar_enabled) {
+        if (!member.user.avatar) {
+            await log(member.guild, config, 'JOIN GATE: DEFAULT AVATAR',
+                `**User:** ${member.user.tag}\n**Reason:** Default avatar detected`,
+                0xffa500, member.id, member.user.tag
+            );
+           if (!config.test_mode) await member.kick('Join gate: default avatar');
+        }
+    }
+
+    // === JOIN GATE: USERNAME FILTER ===
+    // REF-BOT-38b
+    if (config.joingate_username_enabled) {
+        const username = member.user.username.toLowerCase();
+        const patterns = [/discord\.gg/i, /invite/i, /free nitro/i, /\u200b/, /^\s/, /discord\.com\/invite/i];
+        const hoistChars = /^[^a-zA-Z0-9]/;
+       if (patterns.some(p => p.test(username)) || hoistChars.test(username)) {
+            await log(member.guild, config, 'JOIN GATE: USERNAME FLAG',
+                `**User:** ${member.user.tag}\n**Reason:** Suspicious username`,
+                0xffa500, member.id, member.user.tag
+            );
+            if (!config.test_mode) await member.kick('Join gate: suspicious username');
+        }
+    }
+
+    // === JOIN GATE: RAPID REJOIN ===
+    // REF-BOT-38c
+    if (config.joingate_rejoin_enabled) {
+        if (!global.rejoinTracker) global.rejoinTracker = new Map();
+        const key = `${member.guild.id}-${member.user.id}`;
+        const now = Date.now();
+        const last = global.rejoinTracker.get(key);
+        const window = (config.joingate_rejoin_minutes || 10) * 60 * 1000;
+        if (last && now - last < window) {
+            await log(member.guild, config, 'JOIN GATE: RAPID REJOIN',
+                `**User:** ${member.user.tag}\n**Reason:** Rejoined too quickly`,
+                0xffa500, member.id, member.user.tag
+            );
+            if (!config.test_mode) await member.kick('Join gate: rapid rejoin detected');
+        }
+        global.rejoinTracker.set(key, now);
+    }
+
+    // === VERIFICATION ===
+    if (config.verification_enabled && config.verification_channel_id && config.verification_role_id) {
+        const verifyChannel = member.guild.channels.cache.get(config.verification_channel_id);
+        if (verifyChannel) {
+            const { ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+            const button = new ButtonBuilder()
+                .setCustomId(`verify_${member.id}`)
+                .setLabel('✅ Verify')
+                .setStyle(ButtonStyle.Success);
+            const row = new ActionRowBuilder().addComponents(button);
+            const msg = await verifyChannel.send({
+                content: `👋 Welcome <@${member.id}>! Please click the button below to verify and gain access to the server.`,
+                components: [row]
+            }).catch(() => null);
+
+            if (msg && config.verification_timeout_minutes) {
+                const ms = (config.verification_timeout_minutes || 10) * 60 * 1000;
+                const executeAt = new Date(Date.now() + ms).toISOString();
+                await api.post('/api/scheduled-jobs', {
+                    guild_id:   member.guild.id,
+                    type:       'verify_timeout',
+                    target_id:  member.id,
+                    execute_at: executeAt,
+                    payload:    { message_id: msg.id, channel_id: verifyChannel.id }
+                }).catch(() => {});
+            }
+        }
+    }
+    
     // === MEMBER JOIN AUDIT ===
     // REF-BOT-16a
     if (config.audit_members) {
@@ -877,6 +1053,34 @@ client.on('guildMemberAdd', async (member) => {
 
 });
 
+// === VERIFICATION BUTTON HANDLER ===
+client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isButton()) return;
+    if (!interaction.customId.startsWith('verify_')) return;
+
+    const memberId = interaction.customId.replace('verify_', '');
+    if (interaction.user.id !== memberId) {
+        return interaction.reply({ content: '❌ This button is not for you.', ephemeral: true });
+    }
+
+    const config = await getConfig(interaction.guild.id);
+    const member = await interaction.guild.members.fetch(memberId).catch(() => null);
+    if (!member) return interaction.reply({ content: '❌ Member not found.', ephemeral: true });
+
+    const role = interaction.guild.roles.cache.get(config.verification_role_id);
+    if (!role) return interaction.reply({ content: '❌ Verified role not configured.', ephemeral: true });
+
+    await member.roles.add(role, 'Verification completed').catch(() => {});
+    await interaction.update({ content: `✅ <@${memberId}> has been verified!`, components: [] }).catch(() => {});
+
+    await api.post(`/api/logs/${interaction.guild.id}`, {
+        action: 'VERIFIED',
+        target_id: memberId,
+        target_tag: member.user.tag,
+        moderator: 'Penny',
+        reason: 'Member verified via button',
+    }).catch(() => {});
+});
 
 // ============================================================
 // SLASH COMMAND HANDLER
@@ -905,6 +1109,8 @@ client.on('interactionCreate', async (interaction) => {
             case 'tempban':        await handleTempban(interaction, api);               break;
             case 'tempmute':       await handleTempmute(interaction, api);              break;
             case 'panic':          await handlePanicCommand(interaction);               break;
+            case 'quarantine':     await handleQuarantine(interaction);                 break;
+            case 'unquarantine':   await handleUnquarantine(interaction);               break;
         }
     } catch (err) {
         console.error(`[SLASH] Error handling /${interaction.commandName}:`, err.message);
@@ -1254,6 +1460,69 @@ client.on('roleDelete', async (role) => {
     );
 });
 
+// === ANTI-NUKE: MASS BAN DETECTION ===
+// REF-BOT-36
+client.on('guildBanAdd', async (ban) => {
+    const config = await getConfig(ban.guild.id);
+    if (!config.anti_nuke_enabled) return;
+    const fetchedLogs = await ban.guild.fetchAuditLogs({ limit: 1, type: 22 }).catch(() => null);
+    const entry = fetchedLogs?.entries.first();
+    if (!entry) return;
+    const executor = entry.executor;
+    if (executor.id === ban.client.user.id) return;
+    const member = await ban.guild.members.fetch(executor.id).catch(() => null);
+    if (!member) return;
+    if (member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+    const key = `ban-${ban.guild.id}-${executor.id}`;
+    if (!nukeTracker.has(key)) nukeTracker.set(key, []);
+    const actions = nukeTracker.get(key);
+    const now = Date.now();
+    actions.push({ time: now });
+    const window = config.anti_nuke_window_ms || 10000;
+    const recent = actions.filter(a => now - a.time < window);
+    nukeTracker.set(key, recent);
+    if (recent.length >= (config.anti_nuke_threshold || 4)) {
+        await member.ban({ reason: 'Anti-nuke: mass ban detected' }).catch(() => {});
+        await ban.guild.channels.cache.first()?.send(
+            `🚨 **Anti-Nuke triggered** — Mass ban detected by ${executor.tag}. Executor banned.`
+        ).catch(() => {});
+        nukeTracker.set(key, []);
+    }
+});
+
+// === ANTI-NUKE: MASS KICK DETECTION ===
+// REF-BOT-37
+client.on('guildMemberRemove', async (member) => {
+    if (member.id === member.client.user.id) return;
+    const config = await getConfig(member.guild.id);
+    if (!config.anti_nuke_enabled) return;
+    const fetchedLogs = await member.guild.fetchAuditLogs({ limit: 1, type: 20 }).catch(() => null);
+    const entry = fetchedLogs?.entries.first();
+    if (!entry || entry.action !== 20) return;
+    if (Date.now() - entry.createdTimestamp > 3000) return;
+    const executor = entry.executor;
+    if (executor.id === member.client.user.id) return;
+    const executorMember = await member.guild.members.fetch(executor.id).catch(() => null);
+    if (!executorMember) return;
+    if (executorMember.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+    const key = `kick-${member.guild.id}-${executor.id}`;
+    if (!nukeTracker.has(key)) nukeTracker.set(key, []);
+    const actions = nukeTracker.get(key);
+    const now = Date.now();
+    actions.push({ time: now });
+    const window = config.anti_nuke_window_ms || 10000;
+    const recent = actions.filter(a => now - a.time < window);
+    nukeTracker.set(key, recent);
+    if (recent.length >= (config.anti_nuke_threshold || 4)) {
+        await executorMember.ban({ reason: 'Anti-nuke: mass kick detected' }).catch(() => {});
+        await member.guild.channels.cache.first()?.send(
+            `🚨 **Anti-Nuke triggered** — Mass kick detected by ${executor.tag}. Executor banned.`
+        ).catch(() => {});
+        nukeTracker.set(key, []);
+    }
+});
+
+// === ANTI-NUKE: ROLE UPDATE ===
 client.on('roleUpdate', async (oldRole, newRole) => {
     const config = await getConfig(newRole.guild.id);
     if (!config.audit_server_role) return;
@@ -1262,6 +1531,39 @@ client.on('roleUpdate', async (oldRole, newRole) => {
         `Role: ${newRole.name}`,
         0xffa500
     );
+});
+
+// === CHANNEL SYNC ===
+// REF-BOT-34
+client.on('channelCreate', async (channel) => {
+    if (!channel.guild) return;
+    const channels = channel.guild.channels.cache.map(c => ({ id: c.id, name: c.name, type: c.type, position: c.position || 0 }));
+    await api.post(`/api/guild-channels/${channel.guild.id}`, { channels }).catch(() => {});
+});
+client.on('channelDelete', async (channel) => {
+    if (!channel.guild) return;
+    const channels = channel.guild.channels.cache.map(c => ({ id: c.id, name: c.name, type: c.type, position: c.position || 0 }));
+    await api.post(`/api/guild-channels/${channel.guild.id}`, { channels }).catch(() => {});
+});
+client.on('channelUpdate', async (old, channel) => {
+    if (!channel.guild) return;
+    const channels = channel.guild.channels.cache.map(c => ({ id: c.id, name: c.name, type: c.type, position: c.position || 0 }));
+    await api.post(`/api/guild-channels/${channel.guild.id}`, { channels }).catch(() => {});
+});
+
+// === ROLE SYNC ===
+// REF-BOT-35
+client.on('roleCreate', async (role) => {
+    const roles = role.guild.roles.cache.map(r => ({ id: r.id, name: r.name, color: r.color, position: r.position || 0 }));
+    await api.post(`/api/guild-roles/${role.guild.id}`, { roles }).catch(() => {});
+});
+client.on('roleDelete', async (role) => {
+    const roles = role.guild.roles.cache.map(r => ({ id: r.id, name: r.name, color: r.color, position: r.position || 0 }));
+    await api.post(`/api/guild-roles/${role.guild.id}`, { roles }).catch(() => {});
+});
+client.on('roleUpdate', async (old, role) => {
+    const roles = role.guild.roles.cache.map(r => ({ id: r.id, name: r.name, color: r.color, position: r.position || 0 }));
+    await api.post(`/api/guild-roles/${role.guild.id}`, { roles }).catch(() => {});
 });
 
 // === EMOJI EVENTS ===
@@ -1328,6 +1630,67 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     }
 });
 
+// === SCHEDULED JOB PROCESSOR ===
+// REF-BOT-30
+async function processScheduledJobs() {
+    try {
+        const res  = await api.get('/api/scheduled-jobs/due');
+        const jobs = res.data;
+        for (const job of jobs) {
+            try {
+                if (job.type === 'unban') {
+                    const guild  = client.guilds.cache.get(job.guild_id);
+                    if (guild) {
+                        await guild.members.unban(job.target_id, 'Tempban expired').catch(() => {});
+                        await api.post(`/api/logs/${job.guild_id}`, {
+                            action: 'UNBAN',
+                            target_id: job.target_id,
+                            target_tag: job.target_id,
+                            moderator: 'Penny',
+                            reason: 'Tempban expired'
+                        }).catch(() => {});
+                    }
+                }
+                if (job.type === 'unmute') {
+                    const guild  = client.guilds.cache.get(job.guild_id);
+                    if (guild) {
+                        const member = await guild.members.fetch(job.target_id).catch(() => null);
+                        if (member) await member.timeout(null, 'Tempmute expired').catch(() => {});
+                    }
+                }
+                if (job.type === 'verify_timeout') {
+                    const guild  = client.guilds.cache.get(job.guild_id);
+                    if (guild) {
+                        const member = await guild.members.fetch(job.target_id).catch(() => null);
+                        const config = await getConfig(job.guild_id);
+                        if (member) {
+                            const role = guild.roles.cache.get(config.verification_role_id);
+                            const isVerified = role && member.roles.cache.has(role.id);
+                            if (!isVerified) {
+                                await member.send(`⏰ You did not verify in time and have been removed from **${guild.name}**.`).catch(() => {});
+                                await member.kick('Verification timeout').catch(() => {});
+                            }
+                        }
+                        // Delete the verify message
+                        const payload = job.payload ? JSON.parse(job.payload) : null;
+                        if (payload?.channel_id && payload?.message_id) {
+                            const channel = guild.channels.cache.get(payload.channel_id);
+                            const msg = await channel?.messages.fetch(payload.message_id).catch(() => null);
+                            if (msg) await msg.delete().catch(() => {});
+                        }
+                    }
+                }
+                await api.patch(`/api/scheduled-jobs/${job.id}/done`).catch(() => {});
+            } catch(err) {
+                console.error(`[JOBS] Failed job ${job.id}: ${err.message}`);
+            }
+        }
+    } catch(err) {
+        console.error(`[JOBS] Poll error: ${err.message}`);
+    }
+}
+
+setInterval(processScheduledJobs, 30000);
 
 // === LOGIN ===
 client.login(process.env.DISCORD_TOKEN);
