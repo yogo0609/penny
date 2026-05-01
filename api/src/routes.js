@@ -2,28 +2,12 @@
 const express = require('express');
 const router  = express.Router();
 const db      = require('./database');
+const { verifyToken } = require('./auth');
 
 
-// === AUTHENTICATION MIDDLEWARE ===
-// REF-RT-01
-function authenticate(req, res, next) {
-    const apiKey = req.headers['x-api-key'];
-    if (apiKey && apiKey === process.env.API_SECRET) return next();
-
-    const auth  = req.headers['authorization'];
-    const token = auth && auth.split(' ')[1];
-    if (token) {
-        try {
-            const jwt = require('jsonwebtoken');
-            jwt.verify(token, process.env.JWT_SECRET);
-            return next();
-        } catch {}
-    }
-
-    return res.status(401).json({ error: 'Unauthorized' });
-}
-
-router.use(authenticate);
+// === MIDDLEWARE ===
+// Uses verifyToken from auth.js to eliminate duplication
+router.use(verifyToken);
 
 
 // === HEALTH CHECK ===

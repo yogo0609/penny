@@ -132,29 +132,6 @@ async function loadAuditSettings() {}
 async function saveAuditSettings() {
     if (!State.guildId) { toast('No server selected', 'error'); return; }
     const updates = {
-        audit_channel_id: document.getElementById('audit_channel_id').value,
-    };
-    try {
-        await apiPut(`/api/config/${State.guildId}`, updates);
-        Object.assign(State.config, updates);
-        toast('Saved');
-    } catch(e) { toast('Failed', 'error'); }
-}
-
-// REF-AUD-08
-async function toggleAudit(key, value) {
-    if (!State.guildId) { toast('No server selected', 'error'); return; }
-    try {
-        await apiPatch(`/api/config/${State.guildId}`, { key, value });
-        State.config[key] = value;
-        toast(value ? 'Enabled' : 'Disabled');
-    } catch(e) { toast('Failed', 'error'); }
-}
-
-// REF-AUD-09
-async function saveAuditSettings() {
-    if (!State.guildId) { toast('No server selected', 'error'); return; }
-    const updates = {
         audit_channel_id: document.getElementById('audit_channel_id').value.trim(),
     };
     try {
