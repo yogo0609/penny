@@ -1,4 +1,6 @@
-const { api, getConfig, log, audit, takeAction } = require('./helpers');
+const { api, getConfig } = require('./config');
+const { log, audit } = require('./utils/logger');
+const { takeAction } = require('./moderation/warnings');
 const raidTracker = new Map();
 const rejoinTracker = new Map();
 

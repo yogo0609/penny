@@ -1,12 +1,17 @@
 // === DEPENDENCIES ===
 require('dotenv').config();
 const { Client, GatewayIntentBits, Partials } = require('discord.js');
-const { handleBan, handleUnban, handleKick, handleMute, handleUnmute, handleWarn, handleSoftban, handlePurge, handleWarnings, handleClearWarnings, handleLockdown, handleServerLockdown, handleUserinfo, handleBans, handleTempban, handleTempmute } = require('./commands/moderation');
+const {
+    commands,
+    handleBan, handleUnban, handleKick, handleMute, handleUnmute, handleWarn, handleSoftban, handlePurge, handleWarnings, handleClearWarnings, handleLockdown, handleServerLockdown, handleUserinfo, handleBans, handleTempban, handleTempmute
+} = require('./commands');
 const { handleGuildMemberAdd } = require('./guildMemberHandler');
 const { handleMessageDelete, handleMessageUpdate, handleMessageDeleteBulk, handleGuildMemberLeft, handleGuildMemberUpdate } = require('./auditHandlers');
 const { handleMessageCreate } = require('./messageHandler');
 const { handleGuildBanAdd, handleGuildMemberRemoveNuke, handleRoleUpdateAudit, handleChannelCreateAudit, handleChannelDeleteAudit, handleChannelUpdateAudit, handleRoleCreateAudit, handleRoleDeleteAudit, handleRoleCreateSync, handleRoleDeleteSync, handleRoleUpdateSync, handleChannelCreateSync, handleChannelDeleteSync, handleChannelUpdateSync, handleEmojiCreate, handleEmojiDelete, handleWebhookUpdate, handleVoiceStateUpdate } = require('./serverEventHandlers');
-const { api, getConfig, handlePanicCommand, handleQuarantine, handleUnquarantine } = require('./helpers');
+const { api, getConfig } = require('./config');
+const { handlePanicCommand } = require('./moderation/panic');
+const { handleQuarantine, handleUnquarantine } = require('./moderation/quarantine');
 
 
 

@@ -1,5 +1,8 @@
 const { PermissionsBitField } = require('discord.js');
-const { getConfig, isModuleExempt, log, handleModuleAction } = require('./helpers');
+const { getConfig } = require('./config');
+const { isModuleExempt } = require('./utils/exemptions');
+const { log } = require('./utils/logger');
+const { handleModuleAction } = require('./moderation/warnings');
 
 async function handleMessageCreate(message) {
     if (message.author.bot) return;

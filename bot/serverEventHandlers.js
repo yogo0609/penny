@@ -1,5 +1,8 @@
 const { AuditLogEvent, PermissionsBitField } = require('discord.js');
-const { api, getConfig, isExempt, log, audit, takeAction } = require('./helpers');
+const { api, getConfig } = require('./config');
+const { isExempt } = require('./utils/exemptions');
+const { log, audit } = require('./utils/logger');
+const { takeAction } = require('./moderation/warnings');
 const nukeTracker = new Map();
 
 async function handleChannelCreateAudit(channel) {

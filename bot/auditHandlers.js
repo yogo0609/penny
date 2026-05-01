@@ -1,5 +1,6 @@
 const { AuditLogEvent } = require('discord.js');
-const { getConfig, audit } = require('./helpers');
+const { getConfig } = require('./config');
+const { audit } = require('./utils/logger');
 
 // === MESSAGE DELETED ===
 // REF-BOT-25

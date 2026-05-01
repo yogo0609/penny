@@ -1,0 +1,8 @@
+// === DEPENDENCIES ===
+require('dotenv').config();
+const { Client, GatewayIntentBits, Partials, EmbedBuilder, PermissionsBitField, AuditLogEvent } = require('discord.js');
+const { handleBan, handleUnban, handleKick, handleMute, handleUnmute, handleWarn, handleSoftban, handlePurge, handleWarnings, handleClearWarnings, handleLockdown, handleServerLockdown, handleUserinfo, handleBans, handleTempban, handleTempmute, } = require('./commands/moderation');
+const { handleGuildMemberAdd } = require('./guildMemberHandler');
+const { handleMessageDelete, handleMessageUpdate, handleMessageDeleteBulk, handleGuildMemberLeft, handleGuildMemberUpdate } = require('./auditHandlers');
+const { handleMessageCreate } = require('./messageHandler');
+const { handleGuildBanAdd, handleGuildMemberRemoveNuke, handleRoleUpdateAudit, handleChannelCreateAudit, handleChannelDeleteAudit, handleChannelUpdateAudit, handleRoleCreateAudit, handleRoleDeleteAudit, handleRoleUpdateSync, handleEmojiCreate, handleEmojiDelete, handleWebhookUpdate, handleVoiceStateUpdate } = require('./serverEventHandlers');
