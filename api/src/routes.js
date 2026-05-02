@@ -9,6 +9,36 @@ const { verifyToken } = require('./auth');
 // Uses verifyToken from auth.js to eliminate duplication
 router.use(verifyToken);
 
+function badRequest(res, message) {
+    return res.status(400).json({ error: message });
+}
+
+function requireFields(obj, fields) {
+    return fields.filter(f => obj[f] === undefined);
+}
+
+function requireBodyFields(req, res, fields) {
+    const missing = requireFields(req.body, fields);
+    if (missing.length) return badRequest(res, `${missing.join(', ')} required`);
+    return null;
+}
+
+function requireArrayField(req, res, field) {
+    if (!Array.isArray(req.body[field])) {
+        return badRequest(res, `${field} array required`);
+    }
+    return null;
+}
+
+function validateType(res, type, allowed) {
+    if (!allowed.includes(type)) return badRequest(res, `type must be ${allowed.join(', ')}`);
+    return null;
+}
+
+function jsonOk(res, payload = { success: true }) {
+    return res.json(payload);
+}
+
 
 // === HEALTH CHECK ===
 // REF-RT-02
@@ -23,10 +53,9 @@ router.get('/guilds', async (req, res) => {
 
 // REF-RT-02b
 router.post('/guilds', async (req, res) => {
-    const { guilds } = req.body;
-    if (!guilds || !Array.isArray(guilds)) return res.status(400).json({ error: 'guilds array required' });
-    await db.setGuilds(guilds);
-    res.json({ success: true });
+    if (requireArrayField(req, res, 'guilds')) return;
+    await db.setGuilds(req.body.guilds);
+    jsonOk(res);
 });
 
 
@@ -105,20 +134,18 @@ router.get('/exemptions/:guildId', async (req, res) => {
 // REF-RT-07
 router.post('/exemptions/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    const { type, target_id, added_by } = req.body;
-    if (!type || !target_id || !added_by) return res.status(400).json({ error: 'type, target_id, and added_by are required' });
-    if (!['role', 'user', 'channel'].includes(type)) return res.status(400).json({ error: 'type must be role, user, or channel' });
-    await db.addExemption(guildId, type, target_id, added_by);
-    res.json({ success: true });
+    if (requireBodyFields(req, res, ['type', 'target_id', 'added_by'])) return;
+    if (validateType(res, req.body.type, ['role', 'user', 'channel'])) return;
+    await db.addExemption(guildId, req.body.type, req.body.target_id, req.body.added_by);
+    jsonOk(res);
 });
 
 // REF-RT-08
 router.delete('/exemptions/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    const { type, target_id } = req.body;
-    if (!type || !target_id) return res.status(400).json({ error: 'type and target_id are required' });
-    await db.removeExemption(guildId, type, target_id);
-    res.json({ success: true });
+    if (requireBodyFields(req, res, ['type', 'target_id'])) return;
+    await db.removeExemption(guildId, req.body.type, req.body.target_id);
+    jsonOk(res);
 });
 
 
@@ -134,10 +161,16 @@ router.get('/logs/:guildId', async (req, res) => {
 // REF-RT-09a
 router.post('/logs/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    const { action, target_id, target_tag, moderator, reason } = req.body;
-    if (!action) return res.status(400).json({ error: 'action is required' });
-    await db.addModLog(guildId, action, target_id || null, target_tag || null, moderator || 'Penny', reason || null);
-    res.json({ success: true });
+    if (requireBodyFields(req, res, ['action'])) return;
+    await db.addModLog(
+        guildId,
+        req.body.action,
+        req.body.target_id || null,
+        req.body.target_tag || null,
+        req.body.moderator || 'Penny',
+        req.body.reason || null
+    );
+    jsonOk(res);
 });
 
 
@@ -158,10 +191,15 @@ router.get('/warnings/:guildId', async (req, res) => {
 // REF-RT-11
 router.post('/warnings/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    const { user_id, user_tag, reason, issued_by } = req.body;
-    if (!user_id || !user_tag || !issued_by) return res.status(400).json({ error: 'user_id, user_tag, and issued_by are required' });
-    await db.addWarning(guildId, user_id, user_tag, reason || 'No reason provided', issued_by);
-    res.json({ success: true });
+    if (requireBodyFields(req, res, ['user_id', 'user_tag', 'issued_by'])) return;
+    await db.addWarning(
+        guildId,
+        req.body.user_id,
+        req.body.user_tag,
+        req.body.reason || 'No reason provided',
+        req.body.issued_by
+    );
+    jsonOk(res);
 });
 
 // REF-RT-12
@@ -183,19 +221,23 @@ router.get('/bans/:guildId', async (req, res) => {
 // REF-RT-14
 router.post('/bans/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    const { user_id, user_tag, reason, banned_by } = req.body;
-    if (!user_id || !user_tag || !banned_by) return res.status(400).json({ error: 'user_id, user_tag and banned_by are required' });
-    await db.addBan(guildId, user_id, user_tag, reason || 'No reason provided', banned_by);
-    res.json({ success: true });
+    if (requireBodyFields(req, res, ['user_id', 'user_tag', 'banned_by'])) return;
+    await db.addBan(
+        guildId,
+        req.body.user_id,
+        req.body.user_tag,
+        req.body.reason || 'No reason provided',
+        req.body.banned_by
+    );
+    jsonOk(res);
 });
 
 // REF-RT-15
 router.patch('/bans/:guildId/:userId', async (req, res) => {
     const { guildId, userId } = req.params;
-    const { unbanned_by } = req.body;
-    if (!unbanned_by) return res.status(400).json({ error: 'unbanned_by is required' });
-    await db.removeBan(guildId, userId, unbanned_by);
-    res.json({ success: true });
+    if (requireBodyFields(req, res, ['unbanned_by'])) return;
+    await db.removeBan(guildId, userId, req.body.unbanned_by);
+    jsonOk(res);
 });
 
 // REF-RT-16
@@ -218,10 +260,17 @@ router.get('/audit/:guildId', async (req, res) => {
 // REF-RT-18
 router.post('/audit/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    const { event, category, target_id, target_tag, moderator, detail } = req.body;
-    if (!event || !category) return res.status(400).json({ error: 'event and category are required' });
-    await db.addAuditLog(guildId, event, category, target_id, target_tag, moderator, detail);
-    res.json({ success: true });
+    if (requireBodyFields(req, res, ['event', 'category'])) return;
+    await db.addAuditLog(
+        guildId,
+        req.body.event,
+        req.body.category,
+        req.body.target_id,
+        req.body.target_tag,
+        req.body.moderator,
+        req.body.detail
+    );
+    jsonOk(res);
 });
 
 // REF-RT-19
@@ -233,10 +282,9 @@ router.get('/audit-config/:guildId', async (req, res) => {
 // REF-RT-20
 router.post('/audit-config/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    const { event, enabled, channel_id } = req.body;
-    if (!event || enabled === undefined) return res.status(400).json({ error: 'event and enabled are required' });
-    await db.setAuditConfig(guildId, event, enabled, channel_id || null);
-    res.json({ success: true });
+    if (requireBodyFields(req, res, ['event', 'enabled'])) return;
+    await db.setAuditConfig(guildId, req.body.event, req.body.enabled, req.body.channel_id || null);
+    jsonOk(res);
 });
 
 
@@ -309,20 +357,25 @@ router.get('/module-exemptions/:guildId/:module', async (req, res) => {
 // REF-RT-34
 router.post('/module-exemptions/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    const { module, type, target_id, added_by, note } = req.body;
-    if (!type || !target_id) return res.status(400).json({ error: 'type and target_id are required' });
-    if (!['role', 'user', 'channel'].includes(type)) return res.status(400).json({ error: 'type must be role, user or channel' });
-    await db.addModuleExemption(guildId, module, type, target_id, added_by || 'dashboard', note || null);
-    res.json({ success: true });
+    if (requireBodyFields(req, res, ['module', 'type', 'target_id'])) return;
+    if (validateType(res, req.body.type, ['role', 'user', 'channel'])) return;
+    await db.addModuleExemption(
+        guildId,
+        req.body.module,
+        req.body.type,
+        req.body.target_id,
+        req.body.added_by || 'dashboard',
+        req.body.note || null
+    );
+    jsonOk(res);
 });
 
 // REF-RT-35
 router.delete('/module-exemptions/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    const { module, type, target_id } = req.body;
-    if (!type || !target_id) return res.status(400).json({ error: 'type and target_id are required' });
-    await db.removeModuleExemption(guildId, module, type, target_id);
-    res.json({ success: true });
+    if (requireBodyFields(req, res, ['module', 'type', 'target_id'])) return;
+    await db.removeModuleExemption(guildId, req.body.module, req.body.type, req.body.target_id);
+    jsonOk(res);
 });
 
 
@@ -412,10 +465,9 @@ router.get('/guild-channels/:guildId', async (req, res) => {
 // REF-RT-40
 router.post('/guild-channels/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    const { channels } = req.body;
-    if (!channels || !Array.isArray(channels)) return res.status(400).json({ error: 'channels array required' });
-    await db.setGuildChannels(guildId, channels);
-    res.json({ success: true });
+    if (requireArrayField(req, res, 'channels')) return;
+    await db.setGuildChannels(guildId, req.body.channels);
+    jsonOk(res);
 });
 
 // REF-RT-41
@@ -427,10 +479,9 @@ router.get('/guild-roles/:guildId', async (req, res) => {
 // REF-RT-42
 router.post('/guild-roles/:guildId', async (req, res) => {
     const { guildId } = req.params;
-    const { roles } = req.body;
-    if (!roles || !Array.isArray(roles)) return res.status(400).json({ error: 'roles array required' });
-    await db.setGuildRoles(guildId, roles);
-    res.json({ success: true });
+    if (requireArrayField(req, res, 'roles')) return;
+    await db.setGuildRoles(guildId, req.body.roles);
+    jsonOk(res);
 });
 
 // REF-RT-43
@@ -446,12 +497,15 @@ router.patch('/scheduled-jobs/:id/done', async (req, res) => {
 
 // REF-RT-45
 router.post('/scheduled-jobs', async (req, res) => {
-    const { guild_id, type, target_id, execute_at, payload } = req.body;
-    if (!guild_id || !type || !target_id || !execute_at) {
-        return res.status(400).json({ error: 'guild_id, type, target_id, execute_at required' });
-    }
-    await db.addScheduledJob(guild_id, type, target_id, execute_at, payload || null);
-    res.json({ success: true });
+    if (requireBodyFields(req, res, ['guild_id', 'type', 'target_id', 'execute_at'])) return;
+    await db.addScheduledJob(
+        req.body.guild_id,
+        req.body.type,
+        req.body.target_id,
+        req.body.execute_at,
+        req.body.payload || null
+    );
+    jsonOk(res);
 });
 
 // === EXPORTS ===
