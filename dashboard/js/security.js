@@ -892,35 +892,45 @@ function renderJoinGate(tab) {
 }
 
 async function addJoinGateExemption() {
-    const guildId = State.guild;
+    if (!State.guildId) { toast('No server selected', 'error'); return; }
     const type   = document.getElementById('jg-exempt-type').value;
     const id     = document.getElementById('jg-exempt-id').value.trim();
     const note   = document.getElementById('jg-exempt-note').value.trim();
     const module = document.getElementById('jg-exempt-module').value;
     if (!id) return;
-    await fetch(`${API}/api/module-exemptions/${guildId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
-        body: JSON.stringify({ module, type, target_id: id, note })
+
+    await apiPost(`/api/module-exemptions/${State.guildId}`, {
+        module,
+        type,
+        target_id: id,
+        note,
+        added_by: State.user?.username,
     });
+
     document.getElementById('jg-exempt-id').value = '';
     document.getElementById('jg-exempt-note').value = '';
     loadJoinGateExemptions();
 }
 
 async function loadJoinGateExemptions() {
-    const guildId = State.guild;
+    if (!State.guildId) return;
+    const guildId = State.guildId;
     const modules = ['joingate_avatar', 'joingate_username', 'joingate_rejoin'];
     const labels  = { joingate_avatar: 'Avatar Filter', joingate_username: 'Username Filter', joingate_rejoin: 'Rapid Rejoin' };
     let rows = [];
+
     for (const mod of modules) {
-        const res  = await fetch(`${API}/api/module-exemptions/${guildId}/${mod}`, { headers: { 'Authorization': `Bearer ${State.token}` } });
-        const data = await res.json();
+        const data = await apiGet(`/api/module-exemptions/${guildId}/${mod}`);
         rows = rows.concat((data.exemptions || []).map(e => ({ ...e, mod })));
     }
+
     const table = document.getElementById('jg-exempt-table');
     if (!table) return;
-    if (!rows.length) { table.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:8px">No exemptions yet</div>'; return; }
+    if (!rows.length) {
+        table.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:8px">No exemptions yet</div>';
+        return;
+    }
+
     table.innerHTML = `<table class="data-table">
         <thead><tr><th>Function</th><th>Type</th><th>ID</th><th>Note</th><th></th></tr></thead>
         <tbody>${rows.map(e => `<tr>
@@ -928,18 +938,14 @@ async function loadJoinGateExemptions() {
             <td>${e.type}</td>
             <td>${e.target_id}</td>
             <td>${e.note || ''}</td>
-            <td><button class="btn-danger btn-sm" onclick="removeJoinGateExemption('${e.mod}','${e.target_id}')">Remove</button></td>
+            <td><button class="btn-danger btn-sm" onclick="removeJoinGateExemption('${e.mod}','${e.type}','${e.target_id}')">Remove</button></td>
         </tr>`).join('')}</tbody>
     </table>`;
 }
 
-async function removeJoinGateExemption(mod, targetId) {
-    const guildId = State.guild;
-    await fetch(`${API}/api/module-exemptions/${guildId}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
-        body: JSON.stringify({ module: mod, target_id: targetId })
-    });
+async function removeJoinGateExemption(mod, type, targetId) {
+    if (!State.guildId) return;
+    await apiDelete(`/api/module-exemptions/${State.guildId}`, { module: mod, type, target_id: targetId });
     loadJoinGateExemptions();
 }
 
