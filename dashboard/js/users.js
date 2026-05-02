@@ -34,10 +34,7 @@ function renderUsers() {
 // REF-USR-03
 async function loadUsers() {
     try {
-        const res   = await fetch(`${window.PENNY_API_URL}/auth/users`, {
-            headers: { 'Authorization': `Bearer ${State.token}` }
-        });
-        const users = await res.json();
+        const users = await apiGet('/auth/users');
         const body  = document.getElementById('users-body');
         body.innerHTML = users.map(u => `
             <tr>
@@ -73,11 +70,7 @@ async function toggleUserRole(id, currentRole) {
     const newRole = currentRole === 'admin' ? 'owner' : 'admin';
     if (!confirm(`Change this user to ${newRole}?`)) return;
     try {
-        await fetch(`${window.PENNY_API_URL}/auth/users/${id}/role`, {
-            method:  'PATCH',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
-            body:    JSON.stringify({ role: newRole }),
-        });
+        await apiPatch(`/auth/users/${id}/role`, { role: newRole });
         toast(`Role updated to ${newRole}`);
         loadUsers();
     } catch(e) { toast('Failed', 'error'); }
@@ -87,10 +80,7 @@ async function toggleUserRole(id, currentRole) {
 async function deleteUser(id) {
     if (!confirm('Remove this user?')) return;
     try {
-        await fetch(`${window.PENNY_API_URL}/auth/users/${id}`, {
-            method:  'DELETE',
-            headers: { 'Authorization': `Bearer ${State.token}` },
-        });
+        await apiDelete(`/auth/users/${id}`);
         toast('User removed');
         loadUsers();
     } catch(e) { toast('Failed', 'error'); }
@@ -144,9 +134,9 @@ async function submitCreateUser() {
     }
 
     try {
-        const res  = await fetch(`${window.PENNY_API_URL}/auth/users`, {
+        const res  = await apiRequest('/auth/users', {
             method:  'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
+            headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({ username, password, discord_id: discord_id || undefined }),
         });
         const data = await res.json();
@@ -205,9 +195,9 @@ async function submitEditUserModal(id) {
     body.discord_id = discord_id || null;
 
     try {
-        const res  = await fetch(`${window.PENNY_API_URL}/auth/users/${id}`, {
+        const res  = await apiRequest(`/auth/users/${id}`, {
             method:  'PATCH',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
+            headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify(body),
         });
         const data = await res.json();
@@ -266,9 +256,9 @@ async function submitMyProfile() {
     body.discord_id = discord_id || null;
 
     try {
-        const res  = await fetch(`${window.PENNY_API_URL}/auth/me`, {
+        const res  = await apiRequest(`/auth/me`, {
             method:  'PATCH',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
+            headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify(body),
         });
         const data = await res.json();

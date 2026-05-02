@@ -30,11 +30,7 @@ async function toggleTheme() {
     State.user.theme = next;
     localStorage.setItem('penny_user', JSON.stringify(State.user));
     try {
-        await fetch(`${window.PENNY_API_URL}/auth/me/theme`, {
-            method:  'PATCH',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
-            body:    JSON.stringify({ theme: next }),
-        });
+        await apiPatch('/auth/me/theme', { theme: next });
     } catch {}
 }
 

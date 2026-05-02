@@ -466,59 +466,68 @@ async function init() {
 // ============================================================
 
 // REF-CORE-25
-async function apiGet(path) {
+async function apiRequest(path, options = {}) {
     const res = await fetch(`${window.PENNY_API_URL}${path}`, {
-        headers: { 'Authorization': `Bearer ${State.token}` }
+        ...options,
+        headers: {
+            ...options.headers,
+            'Authorization': `Bearer ${State.token}`,
+        },
     });
-    if (res.status === 401) { clearSession(); showLogin(); return; }
+    if (res.status === 401) {
+        clearSession();
+        showLogin();
+    }
+    return res;
+}
+
+// REF-CORE-26
+async function apiGet(path) {
+    const res = await apiRequest(path);
     if (!res.ok) throw new Error(`GET ${path} failed`);
     return res.json();
 }
 
-// REF-CORE-26
+// REF-CORE-27
 async function apiPost(path, body) {
-    const res = await fetch(`${window.PENNY_API_URL}${path}`, {
+    const res = await apiRequest(path, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
+        headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(body),
     });
-    if (res.status === 401) { clearSession(); showLogin(); return; }
     if (!res.ok) throw new Error(`POST ${path} failed`);
     return res.json();
 }
 
-// REF-CORE-27
+// REF-CORE-28
 async function apiPatch(path, body) {
-    const res = await fetch(`${window.PENNY_API_URL}${path}`, {
+    const res = await apiRequest(path, {
         method:  'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
+        headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(body),
     });
-    if (res.status === 401) { clearSession(); showLogin(); return; }
     if (!res.ok) throw new Error(`PATCH ${path} failed`);
     return res.json();
 }
 
-// REF-CORE-28
+// REF-CORE-29
 async function apiPut(path, body) {
-    const res = await fetch(`${window.PENNY_API_URL}${path}`, {
+    const res = await apiRequest(path, {
         method:  'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
+        headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(body),
     });
-    if (res.status === 401) { clearSession(); showLogin(); return; }
     if (!res.ok) throw new Error(`PUT ${path} failed`);
     return res.json();
 }
 
-// REF-CORE-29
+// REF-CORE-30
 async function apiDelete(path, body) {
-    const res = await fetch(`${window.PENNY_API_URL}${path}`, {
+    const res = await apiRequest(path, {
         method:  'DELETE',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${State.token}` },
+        headers: { 'Content-Type': 'application/json' },
         body:    body ? JSON.stringify(body) : undefined,
     });
-    if (res.status === 401) { clearSession(); showLogin(); return; }
     if (!res.ok) throw new Error(`DELETE ${path} failed`);
     return res.json();
 }
