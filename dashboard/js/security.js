@@ -183,7 +183,7 @@ function renderSecOverview() {
                 <div class="card-desc">Click any module to configure it</div>
             </div>
             ${modules.map(m => `
-                <div class="toggle-row" style="cursor:pointer" onclick="setSection('${m.section}')">
+                <div class="toggle-row" style="cursor:pointer" onclick="openSecurityModule('${m.section}')">
                     <div class="toggle-info">
                         <div class="toggle-name">${m.name}</div>
                         <div class="toggle-desc">${m.desc}</div>
@@ -194,6 +194,32 @@ function renderSecOverview() {
                     </div>
                 </div>`).join('')}
         </div>`;
+}
+
+function securityTabForSection(section) {
+    return {
+        secspam:     'Spam',
+        secbadwords: 'Bad Words',
+        seccaps:     'Caps',
+        secmention:  'Mentions',
+        secinvite:   'Links',
+        secantilink: 'Links',
+        secage:      'General',
+        secrepeat:   'Other',
+        secemoji:    'Other',
+        secnewline:  'Other',
+        seczalgo:    'Other',
+        sechoist:    'Other',
+    }[section];
+}
+
+function openSecurityModule(section) {
+    const tab = securityTabForSection(section);
+    if (tab) {
+        setSection('security', tab);
+    } else {
+        setSection(section);
+    }
 }
 
 function filterExemptionId(module, type) {

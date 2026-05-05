@@ -112,7 +112,7 @@ async function loadOverviewStats() {
         const config = State.config;
 
         const allModules = [
-            { key: 'spam_enabled',            name: 'Auto Mod',       section: 'secspam',     icon: 'shield',  color: 'gold'  },
+            { key: 'spam_enabled',            name: 'Auto Mod',       section: 'security',   tab: 'General', icon: 'shield',  color: 'gold'  },
             { key: 'anti_nuke_enabled',        name: 'Anti-Nuke',      section: 'antinuke',    icon: 'nuke',    color: 'blue'  },
             { key: 'verification_enabled',     name: 'Verification',   section: 'verification', icon: 'check',  color: 'green' },
             { key: 'joingate_avatar_enabled',  name: 'Join Gate',      section: 'joingate',    icon: 'gate',    color: 'gold'  },
@@ -181,7 +181,7 @@ async function loadOverviewStats() {
             const on = m.key === 'panicmode' ? false : config[m.key];
             const c  = colorMap[m.color];
             return `
-            <div class="card" style="margin-bottom:0;cursor:pointer;transition:border-color 0.15s" onmouseenter="this.style.borderColor='var(--gold-border)'" onmouseleave="this.style.borderColor='var(--border)'" onclick="setSection('${m.section}')">
+            <div class="card" style="margin-bottom:0;cursor:pointer;transition:border-color 0.15s" onmouseenter="this.style.borderColor='var(--gold-border)'" onmouseleave="this.style.borderColor='var(--border)'" onclick="setSection('${m.section}'${m.tab ? `,'${m.tab}'` : ''})">
                 <div style="display:flex;align-items:center;gap:16px;padding:14px 18px">
                     <div style="width:40px;height:40px;border-radius:10px;background:${c.bg};border:1px solid ${c.border};display:flex;align-items:center;justify-content:center;color:${c.color};flex-shrink:0">
                         ${icons[m.icon]}

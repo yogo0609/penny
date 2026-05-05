@@ -335,13 +335,34 @@ const SECTIONS = {
 };
 
 // REF-CORE-19
-function setSection(section) {
+const SECURITY_SECTION_ALIASES = {
+    secspam:     { section: 'security', tab: 'Spam' },
+    secbadwords: { section: 'security', tab: 'Bad Words' },
+    seccaps:     { section: 'security', tab: 'Caps' },
+    secmention:  { section: 'security', tab: 'Mentions' },
+    secinvite:   { section: 'security', tab: 'Links' },
+    secantilink: { section: 'security', tab: 'Links' },
+    secage:      { section: 'security', tab: 'General' },
+    secrepeat:   { section: 'security', tab: 'Other' },
+    secemoji:    { section: 'security', tab: 'Other' },
+    secnewline:  { section: 'security', tab: 'Other' },
+    seczalgo:    { section: 'security', tab: 'Other' },
+    sechoist:    { section: 'security', tab: 'Other' },
+};
+
+function setSection(section, tab) {
+    const alias = SECURITY_SECTION_ALIASES[section];
+    if (alias) {
+        section = alias.section;
+        tab = tab || alias.tab;
+    }
+
     const def = SECTIONS[section];
     if (!def) return;
     if (def.ownerOnly && State.user?.role !== 'owner') return;
 
     State.section = section;
-    State.tab     = def.tabs[0];
+    State.tab     = tab || def.tabs[0];
 
     localStorage.setItem('penny_section', section);
 
@@ -352,7 +373,7 @@ function setSection(section) {
     document.getElementById('page-title').textContent = def.label || section;
     openGroupForSection(section);
 
-loadGuildConfig().then(() => {
+    loadGuildConfig().then(() => {
         ALL_GROUPS.forEach(g => {
             document.getElementById(`children-${g}`)?.classList.remove('open');
             document.getElementById(`chevron-${g}`)?.classList.remove('open');
