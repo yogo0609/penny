@@ -43,7 +43,7 @@ app.use((err, req, res, next) => {
 
 
 // === START ===
-const db = require('./database');
+const db = require('./db');
 db.initSchema()
     .then(() => {
         app.listen(PORT, () => {
